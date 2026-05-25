@@ -1,0 +1,1579 @@
+下面按你的 6 个问题来。你问得很关键，说明你已经开始碰到 **epoll 非阻塞网络编程真正难的地方** 了：不是语法，而是 **fd、socket、缓冲区、事件、errno** 这些概念之间的关系。
+
+你问的代码位置主要是上传代码里的 `conns.find(fd)`、`tryWrite()`、`modEvent()`、`accept()`、`read()` 和 `EPOLLET` 相关逻辑。
+
+---
+
+# 1. `auto it = conns.find(fd);` 如果不用 `auto`，应该写什么？
+
+这行代码是：
+
+```cpp
+auto it = conns.find(fd);
+```
+
+`conns` 的定义是：
+
+```cpp
+std::unordered_map<int, Conn> conns;
+```
+
+所以：
+
+```cpp
+conns.find(fd)
+```
+
+返回的是一个 **迭代器 iterator**。
+
+如果不用 `auto`，应该写成：
+
+```cpp
+std::unordered_map<int, Conn>::iterator it = conns.find(fd);
+```
+
+也就是说，这两种写法等价：
+
+```cpp
+auto it = conns.find(fd);
+```
+
+等价于：
+
+```cpp
+std::unordered_map<int, Conn>::iterator it = conns.find(fd);
+```
+
+---
+
+## `it` 到底是什么？
+
+`it` 是一个 **迭代器**。
+
+你可以先粗略理解成：
+
+```text
+it 是一个“指向 unordered_map 中某个元素的位置指针”
+```
+
+但它不是普通指针，它是容器提供的“类指针对象”。
+
+`unordered_map<int, Conn>` 里面每一个元素长这样：
+
+```cpp
+std::pair<const int, Conn>
+```
+
+也就是说，map 里面每一项可以理解成：
+
+```cpp
+{
+    key: int,
+    value: Conn
+}
+```
+
+比如：
+
+```text
+fd = 5  ->  Conn{ outbuf = "...", peerClosed = false }
+fd = 6  ->  Conn{ outbuf = "...", peerClosed = false }
+fd = 7  ->  Conn{ outbuf = "...", peerClosed = true  }
+```
+
+所以如果 `it` 找到了某个元素，那么：
+
+```cpp
+it->first
+```
+
+就是 key，也就是 fd。
+
+```cpp
+it->second
+```
+
+就是 value，也就是 `Conn` 对象。
+
+例如：
+
+```cpp
+auto it = conns.find(fd);
+
+if (it != conns.end()) {
+    int key = it->first;
+    Conn& conn = it->second;
+}
+```
+
+---
+
+## `conns.end()` 是什么？
+
+代码里有：
+
+```cpp
+if(it == conns.end()) {
+    return false;
+}
+```
+
+`conns.end()` 不是最后一个元素。
+
+它表示：
+
+```text
+没有找到 / 越过最后一个元素的位置
+```
+
+所以：
+
+```cpp
+conns.find(fd)
+```
+
+有两种结果：
+
+```text
+找到了：返回指向该元素的 iterator
+没找到：返回 conns.end()
+```
+
+所以这段代码：
+
+```cpp
+auto it = conns.find(fd);
+if(it == conns.end()) {
+    return false;
+}
+```
+
+意思是：
+
+```text
+去 conns 里面找 fd 对应的连接状态；
+如果没找到，说明这个 fd 已经不是有效连接了，返回 false。
+```
+
+---
+
+## 这句是什么意思？
+
+```cpp
+std::string& out = it->second.outbuf;
+```
+
+拆开看：
+
+```cpp
+it->second
+```
+
+是这个 fd 对应的 `Conn`。
+
+```cpp
+it->second.outbuf
+```
+
+是这个连接的输出缓冲区。
+
+所以：
+
+```cpp
+std::string& out = it->second.outbuf;
+```
+
+意思是：
+
+```text
+给这个连接的 outbuf 起一个引用别名，名字叫 out。
+```
+
+注意这里是引用：
+
+```cpp
+std::string& out
+```
+
+所以修改 `out`，就是在修改原来的：
+
+```cpp
+conns[fd].outbuf
+```
+
+例如：
+
+```cpp
+out.erase(0, n);
+```
+
+等价于：
+
+```cpp
+conns[fd].outbuf.erase(0, n);
+```
+
+只不过写起来更方便。
+
+---
+
+# 2. `tryWrite()` 里面几个 `errno` 到底是什么意思？
+
+关键代码是：
+
+```cpp
+while(!out.empty()) {
+    ssize_t n = send(fd, out.data(), out.size(), MSG_NOSIGNAL);
+
+    if(n > 0) {
+        out.erase(0, n);
+        continue;
+    }
+
+    if(n == -1 && errno == EINTR) {
+        continue;
+    }
+
+    if(n == -1 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+        return true;
+    }
+
+    perror("send");
+    closeConn(epollfd, fd);
+    return false;
+}
+```
+
+这个函数是在做：
+
+```text
+把用户态 outbuf 里的数据，尽可能写入 fd 对应 socket 的内核发送缓冲区。
+```
+
+注意，不是直接发到客户端应用程序。
+
+更准确的数据流是：
+
+```text
+服务器用户态 outbuf
+        |
+        | send()
+        v
+服务器内核中 clientfd 对应的 TCP 发送缓冲区
+        |
+        | TCP 协议栈 / 网卡 / 网络
+        v
+客户端内核 TCP 接收缓冲区
+        |
+        | 客户端 read()
+        v
+客户端用户态 buffer
+```
+
+---
+
+## `fd` 是什么 fd？
+
+这里的 `fd` 是客户端连接 fd，也就是 `accept()` 返回的 `clientfd`。
+
+它不是 `listenfd`。
+
+这个 fd 对应的是：
+
+```text
+服务端和某个客户端之间的一条 TCP 连接
+```
+
+所以：
+
+```cpp
+send(fd, ...)
+```
+
+意思是：
+
+```text
+服务端通过这个 TCP 连接，向该客户端发送数据。
+```
+
+---
+
+## `send()` 什么时候返回 `n > 0`？
+
+```cpp
+if(n > 0) {
+    out.erase(0, n);
+    continue;
+}
+```
+
+`send()` 返回正数，表示成功写入了 `n` 字节到内核发送缓冲区。
+
+比如：
+
+```text
+outbuf 有 1000 字节
+send 返回 300
+```
+
+说明这次只成功发送了 300 字节。
+
+剩下 700 字节还没发送，所以：
+
+```cpp
+out.erase(0, n);
+```
+
+把已经发送成功的前 300 字节删掉。
+
+---
+
+## `errno == EINTR` 是什么？
+
+```cpp
+if(n == -1 && errno == EINTR) {
+    continue;
+}
+```
+
+`EINTR` 的意思是：
+
+```text
+系统调用被信号中断了。
+```
+
+比如程序正在执行：
+
+```cpp
+send(fd, ...)
+```
+
+这时进程收到一个信号，导致这次 `send()` 没正常完成。
+
+这通常不是连接错误。
+
+所以代码选择：
+
+```text
+继续重试 send()
+```
+
+也就是：
+
+```cpp
+continue;
+```
+
+---
+
+## `errno == EAGAIN || errno == EWOULDBLOCK` 是什么？
+
+这两个在非阻塞 socket 里非常重要。
+
+对于这里的 `send()` 来说：
+
+```cpp
+errno == EAGAIN || errno == EWOULDBLOCK
+```
+
+意思是：
+
+```text
+现在这个 fd 暂时写不进去。
+如果你非要写，原本应该阻塞等待。
+但因为 fd 是非阻塞的，所以 send() 直接返回 -1，并设置 errno。
+```
+
+重点：
+这里不是接收缓冲区满了。
+
+这里是：
+
+```text
+当前 socket 的内核发送缓冲区没有足够空间了。
+```
+
+也可以理解成：
+
+```text
+服务端想往这个连接里发数据，
+但是服务端内核的 TCP 发送缓冲区暂时塞不下更多数据。
+```
+
+---
+
+## 为什么发送缓冲区会满？
+
+常见原因：
+
+```text
+客户端收得太慢
+网络太慢
+TCP 流量控制限制
+客户端的接收窗口变小
+服务端短时间内写太多
+```
+
+比如：
+
+```text
+服务端疯狂 send
+客户端一直不 read
+客户端内核接收缓冲区慢慢满了
+客户端通知服务端：我的接收窗口变小了
+服务端不能继续无限发送
+服务端本地发送缓冲区也慢慢满了
+send() 返回 EAGAIN
+```
+
+所以在 `tryWrite()` 里，`EAGAIN/EWOULDBLOCK` 表示：
+
+```text
+不是连接坏了，而是现在暂时不能继续写。
+```
+
+所以代码没有关闭连接，而是：
+
+```cpp
+return true;
+```
+
+意思是：
+
+```text
+连接还活着，只是这次没写完。
+```
+
+之后主循环会发现：
+
+```cpp
+outbuf 还不为空
+```
+
+于是给这个 fd 添加：
+
+```cpp
+EPOLLOUT
+```
+
+等它下次可写时继续发送。
+
+---
+
+## `EAGAIN` 和 `EWOULDBLOCK` 有区别吗？
+
+很多 Linux 系统上，它们的值是一样的。
+
+但是从可移植性角度来说，最好两个都判断：
+
+```cpp
+errno == EAGAIN || errno == EWOULDBLOCK
+```
+
+它们在这里表达的意思都是：
+
+```text
+非阻塞 IO 暂时不能完成。
+```
+
+对 `read()` 来说，表示：
+
+```text
+接收缓冲区现在没数据可读。
+```
+
+对 `send()` 来说，表示：
+
+```text
+发送缓冲区现在没空间可写。
+```
+
+所以你要分清楚：
+
+```text
+read() 遇到 EAGAIN：没数据可读
+send() 遇到 EAGAIN：没空间可写
+```
+
+---
+
+## 这里传入的 fd 是“有写事件发生的 fd”吗？
+
+不一定。
+
+代码里调用 `tryWrite()` 的地方是：
+
+```cpp
+if(needWrite || (events & EPOLLOUT)) {
+    if(!tryWrite(epollfd, fd)) {
+        continue;
+    }
+}
+```
+
+也就是说，有两种情况会调用 `tryWrite()`：
+
+第一种：
+
+```cpp
+needWrite == true
+```
+
+表示刚刚读到了客户端数据，需要立刻尝试回写。
+
+这时候 fd 不一定是因为 `EPOLLOUT` 触发的。
+
+第二种：
+
+```cpp
+events & EPOLLOUT
+```
+
+表示 epoll 通知这个 fd 当前可写。
+
+---
+
+## 既然 epoll 通知可写，为什么 `send()` 还可能 EAGAIN？
+
+这是网络编程里很常见的问题。
+
+原因有几个：
+
+1. epoll 只表示“曾经在某个时刻看起来可写”，不保证你调用 `send()` 时永远可写。
+2. 你可能在循环里已经写了一部分，把发送缓冲区又写满了。
+3. 多线程场景下，其他线程也可能写同一个 fd。虽然这段代码是单线程，但原则仍然成立。
+4. TCP 状态随时可能变化。
+
+所以即使收到 `EPOLLOUT`，`send()` 仍然必须处理：
+
+```cpp
+EAGAIN
+EWOULDBLOCK
+```
+
+---
+
+# 3. `modEvent()` 是不是把 fd 关注的事件类型改成 `events`？原来的会被覆盖吗？
+
+是的。
+
+代码是：
+
+```cpp
+bool modEvent(int epollfd, int fd, uint32_t events) {
+    epoll_event ev;
+    ev.data.fd = fd;
+    ev.events = events;
+    return epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev) != -1;
+}
+```
+
+这句：
+
+```cpp
+epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev)
+```
+
+意思是：
+
+```text
+修改 fd 在 epoll 中注册的事件。
+```
+
+新的事件集合就是：
+
+```cpp
+ev.events = events;
+```
+
+---
+
+## 原来的事件会不会被覆盖？
+
+会。
+
+`EPOLL_CTL_MOD` 不是“追加事件”，而是：
+
+```text
+用新的 events 替换旧的 events。
+```
+
+比如原来监听的是：
+
+```cpp
+EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLOUT
+```
+
+现在调用：
+
+```cpp
+modEvent(epollfd, fd, EPOLLIN | EPOLLET | EPOLLRDHUP);
+```
+
+那么新的监听事件就变成：
+
+```cpp
+EPOLLIN | EPOLLET | EPOLLRDHUP
+```
+
+旧的 `EPOLLOUT` 就没了。
+
+所以使用 `EPOLL_CTL_MOD` 时，一定要把你仍然想保留的事件全部写进去。
+
+这也是为什么代码里这样写：
+
+```cpp
+uint32_t newEvents = EPOLLIN | EPOLLET | EPOLLRDHUP;
+
+if(!it->second.outbuf.empty()) {
+    newEvents |= EPOLLOUT;
+}
+
+modEvent(epollfd, fd, newEvents);
+```
+
+它的意思是：
+
+```text
+默认继续关注读事件、边缘触发、对端关闭事件；
+如果还有数据没发完，再额外关注写事件。
+```
+
+---
+
+## 为什么要动态修改 `EPOLLOUT`？
+
+因为 `EPOLLOUT` 很特殊。
+
+socket 大部分时间都是可写的。
+
+如果你一直监听：
+
+```cpp
+EPOLLOUT
+```
+
+那么 epoll 可能会频繁告诉你：
+
+```text
+这个 fd 可写
+这个 fd 可写
+这个 fd 可写
+...
+```
+
+但你可能根本没有数据要写。
+
+这会造成 CPU 空转。
+
+所以正确做法是：
+
+```text
+outbuf 为空：不监听 EPOLLOUT
+outbuf 不为空：监听 EPOLLOUT
+```
+
+这段代码就是这么做的。
+
+---
+
+# 4. `listenfd` 可读、`accept()`、`clientfd`、Nagle 算法之间是什么关系？
+
+你这部分理解得基本对，但需要把几个概念精确化。
+
+---
+
+## `listenfd` 可读是什么意思？
+
+对普通客户端 socket 来说：
+
+```text
+EPOLLIN 表示有数据可读。
+```
+
+但对监听 socket，也就是 `listenfd` 来说：
+
+```text
+EPOLLIN 表示有新连接可以 accept。
+```
+
+所以代码里：
+
+```cpp
+if(evs[i].data.fd == listenfd) {
+    int clientfd = accept(...);
+}
+```
+
+意思是：
+
+```text
+有客户端完成 TCP 连接了，服务端可以 accept 它。
+```
+
+---
+
+## `accept()` 后发生了什么？
+
+你可以这样理解：
+
+```text
+listenfd 只负责监听新连接
+clientfd 负责和某一个具体客户端通信
+```
+
+`accept()` 成功后，内核会返回一个新的 fd：
+
+```cpp
+int clientfd = accept(listenfd, ...);
+```
+
+这个 `clientfd` 对应一条已经建立好的 TCP 连接。
+
+所以：
+
+```text
+listenfd：老板，负责接客
+clientfd：服务员，负责服务某个具体客人
+```
+
+---
+
+## 客户端发数据到服务端时，数据怎么走？
+
+假设客户端调用：
+
+```cpp
+send(client_socket, "hello", 5, 0);
+```
+
+数据流大概是：
+
+```text
+客户端用户态 buffer
+        |
+        | send()
+        v
+客户端内核 TCP 发送缓冲区
+        |
+        | TCP 协议栈 / 网络
+        v
+服务端内核中 clientfd 对应的 TCP 接收缓冲区
+        |
+        | 服务端 read(clientfd, ...)
+        v
+服务端用户态 buf
+```
+
+所以你说的这句话基本是对的：
+
+```text
+客户端的发送缓冲区发送到本机为该客户端创建的 clientfd 的接收缓冲区
+```
+
+更准确地说：
+
+```text
+数据从客户端 TCP 发送缓冲区，经网络，到达服务端内核中该 TCP 连接对应的接收缓冲区。
+服务端用 clientfd 这个文件描述符来操作这个连接。
+```
+
+---
+
+## 那为什么要设置 `TCP_NODELAY`？
+
+代码里：
+
+```cpp
+setsockopt(clientfd, IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt));
+```
+
+这表示：
+
+```text
+对 clientfd 对应的 TCP 连接，禁用 Nagle 算法。
+```
+
+Nagle 算法影响的是：
+
+```text
+这个 socket 向外发送数据时，TCP 是否要攒小包。
+```
+
+也就是说，这里主要影响的是：
+
+```text
+服务端通过 clientfd 给客户端发送数据
+```
+
+比如服务端调用：
+
+```cpp
+send(clientfd, "hi", 2, MSG_NOSIGNAL);
+```
+
+如果没有禁用 Nagle 算法，TCP 可能会想：
+
+```text
+这个数据太小了，要不要先等等，看后面有没有更多数据一起发？
+```
+
+开启 `TCP_NODELAY` 后，就是告诉 TCP：
+
+```text
+别等了，有小数据也尽快发。
+```
+
+---
+
+## 是禁用“内核和 clientfd 之间”的 Nagle 吗？
+
+不是。
+
+这里要注意：
+
+```text
+fd 不是一个真正能发送数据的实体。
+fd 只是用户态进程拿来操作内核 socket 对象的一个编号。
+```
+
+`TCP_NODELAY` 禁用的是：
+
+```text
+这个 TCP socket 在发送方向上的 Nagle 算法。
+```
+
+更直白地说：
+
+```text
+禁用服务端这条 TCP 连接向客户端发送数据时的小包合并等待策略。
+```
+
+它不是禁用“内核和 clientfd 之间”的东西。
+
+因为：
+
+```text
+clientfd 只是一个文件描述符编号；
+真正干活的是内核里的 TCP socket。
+```
+
+---
+
+## 会不会影响客户端向服务端发送数据？
+
+不会直接影响。
+
+服务端设置：
+
+```cpp
+TCP_NODELAY on clientfd
+```
+
+影响的是：
+
+```text
+服务端这个 socket 往外发数据时的行为。
+```
+
+如果客户端也想禁用 Nagle 算法，那么客户端自己也要对自己的 socket 设置：
+
+```cpp
+setsockopt(client_socket, IPPROTO_TCP, TCP_NODELAY, ...)
+```
+
+服务端不能替客户端的 socket 设置 TCP_NODELAY。
+
+---
+
+# 5. `clientfd` 可读、`read()`、接收缓冲区、发送缓冲区到底是什么关系？
+
+你问的是：
+
+> clientfd 可读就表示 clientfd 的接收缓冲区收到了来自客户端的数据？然后调用 read，内核就能从 clientfd 的接收缓冲区读取数据？这个过程是 clientfd 把要发送的数据从自己的发送缓冲区发送到内核吗？
+
+这里有一个地方需要纠正。
+
+---
+
+## `clientfd` 可读是什么意思？
+
+是的，`clientfd` 可读表示：
+
+```text
+服务端内核中，这个 TCP 连接的接收缓冲区里有数据了。
+```
+
+也就是客户端发来的数据已经到达服务端内核。
+
+所以 epoll 通知：
+
+```text
+这个 fd 有 EPOLLIN，可以 read。
+```
+
+---
+
+## `read(fd, buf, sizeof(buf))` 做了什么？
+
+代码里：
+
+```cpp
+ssize_t n = read(fd, buf, sizeof(buf));
+```
+
+它做的是：
+
+```text
+从内核 socket 接收缓冲区，把数据拷贝到用户态 buf 中。
+```
+
+数据方向是：
+
+```text
+服务端内核接收缓冲区
+        |
+        | read()
+        v
+服务端用户态 char buf[1024]
+```
+
+所以 `read()` 不是从发送缓冲区读。
+
+它是从：
+
+```text
+接收缓冲区
+```
+
+读。
+
+---
+
+## `read()` 不是 clientfd 把发送缓冲区的数据发给内核
+
+这句话不对：
+
+```text
+clientfd 把要发送的数据从自己的发送缓冲区发送到内核
+```
+
+更准确地说：
+
+```text
+clientfd 本身不拥有缓冲区。
+clientfd 只是一个编号。
+真正的接收缓冲区、发送缓冲区都在内核的 socket 对象里。
+```
+
+对于服务端这个 `clientfd`：
+
+```text
+read(clientfd, ...)
+```
+
+是：
+
+```text
+内核接收缓冲区 -> 用户态 buffer
+```
+
+```text
+send(clientfd, ...)
+```
+
+是：
+
+```text
+用户态 buffer/outbuf -> 内核发送缓冲区
+```
+
+---
+
+## 服务端收到数据再回显，完整流程是这样
+
+假设客户端发送 `"hello"`。
+
+### 第一步：客户端发送
+
+```text
+客户端用户态 "hello"
+        |
+        | send()
+        v
+客户端内核发送缓冲区
+        |
+        | 网络
+        v
+服务端内核接收缓冲区
+```
+
+### 第二步：服务端 epoll 收到 `EPOLLIN`
+
+```text
+服务端 epoll_wait 返回：
+clientfd 可读
+```
+
+### 第三步：服务端 read
+
+```text
+服务端内核接收缓冲区
+        |
+        | read(clientfd, buf, 1024)
+        v
+服务端用户态 buf
+```
+
+### 第四步：服务端把数据放进 `outbuf`
+
+```cpp
+conns[fd].outbuf.append(buf, n);
+```
+
+这一步是：
+
+```text
+用户态 buf -> 用户态 outbuf
+```
+
+还没有进入内核发送缓冲区。
+
+### 第五步：服务端 send
+
+```cpp
+send(fd, out.data(), out.size(), MSG_NOSIGNAL);
+```
+
+这一步是：
+
+```text
+服务端用户态 outbuf
+        |
+        | send()
+        v
+服务端内核发送缓冲区
+        |
+        | 网络
+        v
+客户端内核接收缓冲区
+```
+
+### 第六步：客户端 read
+
+```text
+客户端内核接收缓冲区
+        |
+        | read()
+        v
+客户端用户态 buffer
+```
+
+---
+
+# 6. ET 和 LT 的区别到底在哪里？
+
+这是 epoll 里非常核心的点。
+
+`epoll` 有两种触发模式：
+
+```text
+LT：Level Triggered，水平触发
+ET：Edge Triggered，边缘触发
+```
+
+默认是 LT。
+
+代码里客户端 fd 使用的是 ET：
+
+```cpp
+ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+```
+
+其中：
+
+```cpp
+EPOLLET
+```
+
+就表示使用边缘触发。
+
+---
+
+# LT：水平触发
+
+LT 的特点是：
+
+```text
+只要 fd 还满足条件，epoll_wait 就会一直提醒你。
+```
+
+对于读事件来说：
+
+```text
+只要接收缓冲区里还有数据没读完，epoll_wait 就会继续返回 EPOLLIN。
+```
+
+举个例子。
+
+假设服务端接收缓冲区里有 1000 字节。
+
+你调用一次：
+
+```cpp
+read(fd, buf, 100);
+```
+
+只读了 100 字节。
+
+还剩：
+
+```text
+900 字节
+```
+
+如果是 LT 模式，那么下一次：
+
+```cpp
+epoll_wait()
+```
+
+还会继续告诉你：
+
+```text
+fd 可读，还有数据没读完。
+```
+
+所以 LT 比较“啰嗦”，会一直提醒。
+
+可以理解成：
+
+```text
+LT：你没读完？那我下次还提醒你。
+```
+
+---
+
+# ET：边缘触发
+
+ET 的特点是：
+
+```text
+只有状态发生变化时，epoll_wait 才提醒你。
+```
+
+对于读事件来说，通常是从：
+
+```text
+没有数据可读
+```
+
+变成：
+
+```text
+有数据可读
+```
+
+这个瞬间，epoll 通知你一次。
+
+还是刚才的例子。
+
+服务端接收缓冲区有 1000 字节。
+
+epoll 通知你：
+
+```text
+fd 可读
+```
+
+你只读了 100 字节。
+
+还剩：
+
+```text
+900 字节
+```
+
+如果是 ET 模式，下一次 `epoll_wait()` 不一定会继续提醒你。
+
+因为在 epoll 看来：
+
+```text
+状态没有发生新的变化。
+之前已经从“不可读”变成“可读”并通知过你了。
+你自己没读完，那是你的事。
+```
+
+所以 ET 可以理解成：
+
+```text
+ET：我只在状态变化时提醒你一次，你必须一次性处理干净。
+```
+
+---
+
+## 一个非常直观的对比
+
+假设内核接收缓冲区有 1000 字节，你每次只读 100 字节。
+
+### LT 模式
+
+```text
+epoll_wait 返回：可读
+read 100 字节，还剩 900
+
+epoll_wait 返回：可读
+read 100 字节，还剩 800
+
+epoll_wait 返回：可读
+read 100 字节，还剩 700
+
+...
+```
+
+LT 会反复提醒。
+
+---
+
+### ET 模式
+
+```text
+epoll_wait 返回：可读
+read 100 字节，还剩 900
+
+epoll_wait 可能不再返回这个 fd
+因为 fd 仍然是“可读状态”，但没有新的边缘变化
+```
+
+所以 ET 模式下，如果你只读一次，可能会导致：
+
+```text
+数据明明在内核接收缓冲区里，
+但程序再也不去读它。
+```
+
+这就是 ET 模式最容易写错的地方。
+
+---
+
+## 所以 ET 模式必须怎么写？
+
+必须这样写：
+
+```cpp
+while (true) {
+    ssize_t n = read(fd, buf, sizeof(buf));
+
+    if (n > 0) {
+        // 处理数据
+    } else if (n == -1 && errno == EAGAIN) {
+        // 读完了
+        break;
+    } else {
+        // 出错或关闭
+    }
+}
+```
+
+也就是：
+
+```text
+一直读，直到 read 返回 EAGAIN/EWOULDBLOCK。
+```
+
+`EAGAIN` 在这里表示：
+
+```text
+内核接收缓冲区已经被读空了。
+```
+
+只有读到 `EAGAIN`，你才可以放心退出读循环。
+
+---
+
+## 你这段代码为什么用了 while？
+
+代码是：
+
+```cpp
+if(events & (EPOLLIN | EPOLLPRI)) {
+    while(1) {
+        char buf[1024];
+        ssize_t n = read(fd, buf, sizeof(buf));
+
+        if(n > 0) {
+            ...
+        } else if(n == 0) {
+            ...
+            break;
+        } else {
+            if(errno == EINTR) {
+                continue;
+            }
+            if(errno == EAGAIN || errno == EWOULDBLOCK) {
+                break;
+            }
+
+            perror("read");
+            closeConn(epollfd, fd);
+            alive = false;
+            break;
+        }
+    }
+}
+```
+
+这正是 ET 模式的标准写法。
+
+意思是：
+
+```text
+既然你用的是 EPOLLET，
+那我每次收到可读事件后，
+就必须一直 read，
+直到读到 EAGAIN，
+说明内核接收缓冲区确实空了。
+```
+
+---
+
+## LT 和 ET 的比喻
+
+可以把 fd 的接收缓冲区想象成一个水盆。
+
+### LT 模式
+
+水盆里只要还有水，管理员就一直喊：
+
+```text
+有水！有水！有水！
+```
+
+你舀一勺，还剩水，他继续喊。
+
+---
+
+### ET 模式
+
+管理员只在水盆从“没水”变成“有水”的那一刻喊一次：
+
+```text
+来水了！
+```
+
+你听到后，必须自己把水舀干。
+
+如果你只舀一点，剩下的水还在盆里，但管理员不一定继续喊。
+
+---
+
+## ET 为什么性能更高？
+
+因为 ET 通知次数更少。
+
+LT 可能反复提醒：
+
+```text
+还有数据
+还有数据
+还有数据
+```
+
+ET 通常只提醒状态变化：
+
+```text
+刚刚变得可读了
+```
+
+所以 ET 在高并发下事件通知更少，性能潜力更高。
+
+但代价是：
+
+```text
+代码更容易写错。
+```
+
+ET 必须配合：
+
+```text
+非阻塞 fd
+while 循环读到 EAGAIN
+while 循环写到 EAGAIN 或写完
+```
+
+你这段代码正是这样设计的。
+
+---
+
+# 把你的几个问题串成一条完整链路
+
+现在把整体串起来。
+
+---
+
+## 服务端启动后
+
+```text
+listenfd 被加入 epoll
+监听 EPOLLIN
+```
+
+对 `listenfd` 来说：
+
+```text
+EPOLLIN = 有新连接可以 accept
+```
+
+---
+
+## 新客户端连接
+
+```text
+客户端 connect()
+TCP 三次握手完成
+listenfd 变得可读
+epoll_wait 返回 listenfd
+服务端 accept()
+内核返回 clientfd
+```
+
+此时：
+
+```text
+listenfd：继续负责监听新连接
+clientfd：负责和这个客户端通信
+```
+
+---
+
+## 客户端发数据
+
+数据流：
+
+```text
+客户端用户态
+ -> 客户端内核发送缓冲区
+ -> 网络
+ -> 服务端内核接收缓冲区
+```
+
+这时：
+
+```text
+clientfd 变得可读
+epoll_wait 返回 clientfd 的 EPOLLIN
+```
+
+---
+
+## 服务端 read
+
+```cpp
+read(clientfd, buf, 1024);
+```
+
+数据流：
+
+```text
+服务端内核接收缓冲区
+ -> 服务端用户态 buf
+```
+
+因为客户端 fd 用了 ET，所以必须：
+
+```text
+一直 read 到 EAGAIN
+```
+
+---
+
+## 服务端准备回显
+
+```cpp
+conns[fd].outbuf.append(buf, n);
+```
+
+数据流：
+
+```text
+用户态 buf
+ -> 用户态 outbuf
+```
+
+---
+
+## 服务端 send
+
+```cpp
+send(fd, out.data(), out.size(), MSG_NOSIGNAL);
+```
+
+数据流：
+
+```text
+服务端用户态 outbuf
+ -> 服务端内核发送缓冲区
+ -> 网络
+ -> 客户端内核接收缓冲区
+```
+
+如果发送缓冲区满了：
+
+```text
+send 返回 -1
+errno = EAGAIN/EWOULDBLOCK
+```
+
+这表示：
+
+```text
+现在暂时写不进去，不是连接坏了。
+```
+
+于是保留 `outbuf`，监听 `EPOLLOUT`。
+
+---
+
+## 修改 epoll 事件
+
+如果 `outbuf` 还没发完：
+
+```cpp
+newEvents = EPOLLIN | EPOLLET | EPOLLRDHUP | EPOLLOUT;
+```
+
+如果 `outbuf` 发完了：
+
+```cpp
+newEvents = EPOLLIN | EPOLLET | EPOLLRDHUP;
+```
+
+调用：
+
+```cpp
+modEvent(epollfd, fd, newEvents);
+```
+
+这会用新的事件集合覆盖旧事件集合。
+
+---
+
+# 最后用一句话回答你的 6 个问题
+
+1. 不用 `auto`，`it` 应该写成：
+
+```cpp
+std::unordered_map<int, Conn>::iterator it = conns.find(fd);
+```
+
+`it` 是一个迭代器，指向 `unordered_map` 里的某个键值对，`it->first` 是 fd，`it->second` 是 `Conn`。
+
+2. `tryWrite()` 里的 `EINTR` 是被信号中断，重试；`EAGAIN/EWOULDBLOCK` 对 `send()` 来说表示 **发送缓冲区暂时没空间写了**，不是接收缓冲区满。
+
+3. `modEvent()` 是修改 fd 在 epoll 中关注的事件，新的 `events` 会覆盖旧的事件集合。
+
+4. `listenfd` 可读表示有新连接；`accept()` 返回 `clientfd`；`TCP_NODELAY` 禁用的是服务端这个 `clientfd` 对应 TCP 连接在 **向客户端发送数据时** 的 Nagle 算法。
+
+5. `clientfd` 可读表示服务端内核里这个连接的 **接收缓冲区** 有数据；`read()` 是把数据从内核接收缓冲区拷贝到用户态 `buf`；`send()` 才是把用户态数据拷贝到内核发送缓冲区。
+
+6. LT 是“只要还有数据就一直提醒”；ET 是“状态变化时提醒一次”，所以 ET 模式下必须 `while read()` 直到 `EAGAIN`，否则可能还有数据没读完但 epoll 不再提醒。
