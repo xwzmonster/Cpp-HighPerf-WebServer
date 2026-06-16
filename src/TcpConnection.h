@@ -12,8 +12,9 @@
 
 class TcpServer;
 class Channel;
-class Epoll;
+// class Epoll;
 class Socket;
+class Eventloop;
 
 // 保存每个客户端连接的状态
 class TcpConnection {
@@ -29,7 +30,7 @@ private:
     bool refresh(); // 根据当前是否还有数据没发完，决定是否继续监听 EPOLLOUT
 
 public: 
-    TcpConnection(Epoll* ep, int fd);
+    TcpConnection(Eventloop* loop, int fd);
     ~TcpConnection();
 
     bool handleRead();

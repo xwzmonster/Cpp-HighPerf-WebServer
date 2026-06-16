@@ -21,20 +21,73 @@
 
 ## 阶段 1：抽象 EventLoop
 
-目标：把事件循环从 `TcpServer` 中拆出来。
+目标：把事件循环从 `TcpServer` 中逐步拆出来，让 `Eventloop` 成为 Reactor 的核心调度对象。
 
-计划：
+### 阶段 1A：Eventloop 接管 Epoll 所有权
 
-1. 新增 `EventLoop` 类。
-2. `EventLoop` 持有 `Epoll`。
-3. `EventLoop::loop()` 负责 `epoll_wait` 和 `Channel::handleEvent()`。
-4. `Channel` 持有 `EventLoop*` 或继续持有 `Epoll*`，本阶段建议先持有 `EventLoop*`，由 `EventLoop` 转发 update/remove。
-5. `TcpServer` 不再直接调用 `ep_->loop()`，而是调用 `loop_->loop()`。
+目标：让 `Eventloop` 持有 `Epoll`，`TcpServer` 不再自己拥有 `Epoll`。
+
+已完成：
+
+  1. 新增 `Eventloop` 类。
+  2. `Eventloop` 内部使用 `std::unique_ptr<Epoll>` 管理 `Epoll` 对象。
+  3. `main` 创建 `Eventloop`。
+  4. `main` 创建 `TcpServer` 时传入 `Eventloop*`。
+  5. `TcpServer` 不再持有 `Epoll`。
+  6. `TcpServer` 通过 `Eventloop` 间接使用 `Epoll`。
+  7. `Makefile` 的服务端源文件加入 `Eventloop.cpp`。
 
 完成标准：
 
-1. 行为和阶段 0 完全一致。
-2. `TcpServer` 不直接控制底层 epoll 等待。
+  1. `make` 能成功。
+  2. 服务端能正常启动。
+  3. 多客户端 echo 正常。
+  4. 客户端断开后服务端不崩溃。
+  5. 行为和阶段 0 保持一致。
+
+### 阶段 1B：Channel 持有 Eventloop*
+
+  目标：让 `Channel` 不再直接持有 `Epoll*`，而是持有 `Eventloop*`。
+
+  已完成：
+
+  1. `Channel` 构造函数参数从 `Epoll*` 改为 `Eventloop*`。
+  2. `Channel` 内部成员从 `Epoll*` 改为 `Eventloop*`。
+  3. `Channel::update()` 通过 `Eventloop::updateChannel()` 转发。
+  4. `Channel::remove()` 通过 `Eventloop::removeChannel()` 转发。
+  5. `TcpServer` 创建监听 `Channel` 时传入 `Eventloop*`。
+  6. `TcpConnection` 创建连接 `Channel` 时传入 `Eventloop*`。
+  7. 不再通过 `Eventloop::getEpoll()` 暴露底层 `Epoll`。
+
+  完成标准：
+
+  1. `make` 能成功。
+  2. 服务端能正常启动。
+  3. 多客户端 echo 正常。
+  4. 客户端断开后服务端不崩溃。
+  5. `Channel` 不再依赖 `Epoll*`。
+  6. `TcpServer` 和 `TcpConnection` 不再绕过 `Eventloop` 直接操作 `Epoll`。
+
+### 阶段 1C：Eventloop 接管事件循环
+
+目标：让 `Eventloop` 真正负责事件循环和事件分发，`TcpServer` 不再自己写 `while` 循环处理活跃事件。
+
+计划：
+
+1. 给 `Eventloop` 提供真正的 `loop()` 函数。
+2. `Eventloop::loop()` 内部调用 `poll(-1)`。
+3. `Eventloop::loop()` 遍历活跃的 `Channel*`。
+4. `Eventloop::loop()` 调用 `Channel::handleEvent()`。
+5. 连接关闭时，仍由 `TcpServer` 负责删除 `TcpConnection`，但删除动作需要通过回调或其他清晰机制触发。
+
+完成标准：
+
+1. `TcpServer::start()` 不再自己写事件循环。
+2. `TcpServer` 不再直接遍历活跃 `Channel*`。
+3. `Eventloop` 负责等待事件和分发事件。
+4. 多客户端 echo 行为和阶段 1B 完全一致。
+5. 客户端断开后服务端不崩溃。
+6. 已更新 `docs` 和 `development_log`。
 
 ## 阶段 2：抽象 Acceptor
 

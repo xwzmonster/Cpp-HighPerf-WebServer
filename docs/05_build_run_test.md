@@ -5,7 +5,7 @@
 建议服务端源文件包含：
 
 ```makefile
-SERVER_SRC = tcpepoll_02.cpp TcpServer.cpp TcpConnection.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp
+SERVER_SRC = tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp
 ```
 
 如果入口文件改名为 `tcpepoll.cpp`，则使用：
@@ -17,13 +17,14 @@ SERVER_SRC = tcpepoll.cpp TcpServer.cpp TcpConnection.cpp InetAddress.cpp Socket
 编译命令：
 
 ```bash
+cd src
 make
 ```
 
 只做语法检查：
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp TcpServer.cpp TcpConnection.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp
+g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp
 ```
 
 ## 运行
@@ -55,4 +56,3 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp TcpServer.cpp TcpConn
 2. 编写批量连接测试客户端。
 3. 使用 `nc` 快速连接测试。
 4. 后续支持 HTTP 后再使用 `wrk` 或 `ab`。
-

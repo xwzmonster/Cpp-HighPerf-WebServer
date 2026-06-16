@@ -4,6 +4,8 @@
 
 当前源码已经从单文件版本逐步拆成以下对象：
 
+### 阶段 1A 当前架构
+
 ```text
 main
   -> TcpServer
@@ -55,3 +57,25 @@ main
 4. `TcpConnection` 负责单个连接的状态。
 5. `TcpServer` 负责连接集合和连接生命周期。
 6. 单线程阶段不加锁，多线程阶段再引入线程归属和跨线程任务队列。
+
+## 阶段 1B 当前架构
+
+```text
+  main
+    -> Eventloop
+         -> Epoll
+    -> TcpServer
+         -> listen Socket
+         -> listen Channel -> Eventloop
+         -> unordered_map<int, unique_ptr<TcpConnection>>
+                -> client Socket
+                -> client Channel -> Eventloop
+```
+
+当前职责：
+
+  1. Eventloop 拥有 Epoll。
+  2. Channel 不再直接持有 Epoll*，而是持有 Eventloop*。
+  3. Channel 通过 Eventloop::updateChannel() 和 Eventloop::removeChannel() 间接操作 epoll。
+  4. TcpServer 仍然负责主事件循环和连接删除。
+  5. 下一步需要让 Eventloop 进一步接管事件分发逻辑。

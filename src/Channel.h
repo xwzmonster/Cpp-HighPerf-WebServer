@@ -2,13 +2,14 @@
 #include<sys/epoll.h>
 #include<functional>
 
-class Epoll;
+// class Epoll;
+class Eventloop;
 
 // 封装“一个 fd 在 epoll 里的状态”. 它保存 fd、想监听的事件、实际发生的事件、回调函数
 class Channel {
 private:
     int fd_; // Channel拥有的fd, Channel和fd是一对一的关系
-    Epoll* ep_; // Channel对应的红黑树, Channel与Epoll是多对一的关系, 一个Channel只对应一个Epoll
+    Eventloop* loop_; // Channel对应的红黑树, Channel与Epoll是多对一的关系, 一个Channel只对应一个Epoll
     bool isInEpoll_; // Channel是否已添加到epoll树上, 如果已添加, 调用 EPOLL_CTL_MOD；否则调用 EPOLL_CTL_ADD
     uint32_t events_; // 需要监听的事件
     uint32_t revents_; // 实际发生的事件(epoll_wait 返回时, 由 Epoll 类把内核返回的具体事件填充到这里)
@@ -20,7 +21,7 @@ private:
     EventCallback errorCallback_;
 
 public:
-    explicit Channel(Epoll* ep, int fd);
+    explicit Channel(Eventloop* loop, int fd);
     Channel(const Channel&) = delete;
     Channel& operator=(const Channel&) = delete;
     ~Channel();

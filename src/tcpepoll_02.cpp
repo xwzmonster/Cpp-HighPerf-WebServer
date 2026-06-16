@@ -19,6 +19,7 @@
 #include"Channel.h"
 #include"TcpServer.h"
 #include"TcpConnection.h"
+#include"Eventloop.h"
 
 int main(int argc, char* argv[]) {
     if(argc != 3) {
@@ -33,7 +34,8 @@ int main(int argc, char* argv[]) {
         printf("invaild port: %s\n", argv[2]);
         return -1;
     }
-    TcpServer Server(argv[1], static_cast<uint16_t>(port));
-    Server.start();
+    Eventloop loop;
+    TcpServer server(&loop, argv[1], static_cast<uint16_t>(port));
+    server.start();
     return 0;
 }

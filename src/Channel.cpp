@@ -1,8 +1,10 @@
 #include"Channel.h"
-#include"Epoll.h"
+// #include"Epoll.h"
+#include"Eventloop.h"
 
-Channel::Channel(Epoll* ep, int fd) {
-    this->ep_ = ep;
+Channel::Channel(Eventloop* loop, int fd) {
+    // this->ep_ = ep;
+    this->loop_ = loop;
     this->fd_ = fd;
     this->isInEpoll_ = false;
     this->events_ = 0; // 需要监听的事件
@@ -25,7 +27,7 @@ void Channel::UseET() { // 设置采用边缘触发ET模式
 
 void Channel::enableReading() { // 让epoll_wait监听fd_的读事件
     this->events_ |= EPOLLIN;
-    this->ep_->UpdateChannel(this);
+    this->loop_->updateChannel(this);
 }
 
 void Channel::set__isInepoll_(bool opt) { // 设置成员变量inepoll_ = true;
@@ -53,7 +55,7 @@ bool Channel::get_isInEpoll_() {
 }
 
 bool Channel::update() {
-    return this->ep_->UpdateChannel(this);
+    return this->loop_->updateChannel(this);
 }
 
 void Channel::setReadCallback(const EventCallback& cb) {
@@ -102,5 +104,5 @@ bool Channel::handleEvent() {
 }
 
 bool Channel::remove() {
-    return this->ep_->RemoveChannel(this);
+    return this->loop_->removeChannel(this);
 }

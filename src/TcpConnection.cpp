@@ -83,10 +83,10 @@ bool TcpConnection::refresh() {
     return channel_->update();
 }
 
-TcpConnection::TcpConnection(Epoll* ep, int fd) 
+TcpConnection::TcpConnection(Eventloop* loop, int fd) 
         : fd_(fd), 
         sock_(std::make_unique<Socket>(fd)), 
-        channel_(std::make_unique<Channel>(ep, fd)),
+        channel_(std::make_unique<Channel>(loop, fd)),
         outbuf_(), 
         peerClosed_(false) {
     sock_->SetTCPNoDelay(true);
@@ -157,7 +157,7 @@ bool TcpConnection::handleRead() {
             needWrite = true;
         } else if(n == 0) {
             // 对端正常关闭写端
-            printf("clientfd(eventfd = %d) disconnected.\n", this->fd_);
+            printf("clientfd(client fd = %d) disconnected.\n", this->fd_);
             this->peerClosed_ = true;
             break;
         } else {
@@ -186,6 +186,7 @@ bool TcpConnection::handleWrite() {
     return this->refresh();
 }
 bool TcpConnection::handleClose() {
+    printf("clientfd(eventfd = %d) disconnected.\n", this->fd_);
     this->peerClosed_ = true;
     return this->refresh();
 }

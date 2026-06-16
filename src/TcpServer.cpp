@@ -1,7 +1,8 @@
-#include"TcpServer.h"
+#include "TcpServer.h"
 #include "TcpConnection.h"
-#include "Epoll.h"
+// #include "Epoll.h"
 #include "Channel.h"
+#include "Eventloop.h"
 
 #include <vector>
 #include <memory>
@@ -10,8 +11,11 @@
 
 
 
-TcpServer::TcpServer(const std::string& ip, uint16_t port) {
-    int listenfd = createNonBlockingFd();
+TcpServer::TcpServer(Eventloop* loop, const std::string& ip, uint16_t port) : loop_(loop){
+    if(this->loop_ == nullptr) {
+        return;
+    }
+    int listenfd = createNonBlockingFd();   
     if(listenfd == -1) {
         return;
     }
@@ -28,8 +32,8 @@ TcpServer::TcpServer(const std::string& ip, uint16_t port) {
     if(!listenSock_->Listen(128)) {
         return;
     }
-    this->ep_ = std::make_unique<Epoll>();
-    this->listenChannel_ = std::make_unique<Channel>(ep_.get(), listenSock_->getfd());
+    // this->ep_ = std::make_unique<Epoll>();
+    this->listenChannel_ = std::make_unique<Channel>(this->loop_, listenSock_->getfd());
     /*
         [this] 的意思是: 回调函数以后发生时，调用当前这个 TcpServer 对象的 handleAccept()
     */
@@ -53,7 +57,7 @@ void TcpServer::start() {
 
 void TcpServer::loop() {
     while(1) {
-        std::vector<Channel*> chns = this->ep_->loop(-1);
+        std::vector<Channel*> chns = this->loop_->poll(-1);
         if(chns.empty()) {
             continue;
         }
@@ -85,7 +89,7 @@ bool TcpServer::handleAccept() {
         std::string ip = clientaddr.get_str_ip();
         printf("accept client(fd = %d, ip = %s, port = %d) ok\n", clientfd, ip.c_str(), clientaddr.getport());
         
-        this->conns_[clientfd] = std::make_unique<TcpConnection>(this->ep_.get(), clientfd);
+        this->conns_[clientfd] = std::make_unique<TcpConnection>(this->loop_, clientfd);
     }
     return true;
 }
@@ -101,10 +105,6 @@ bool TcpServer::removeConnection(int fd) {
     }
     this->conns_.erase(it);
     return true;
-}
-
-Epoll* TcpServer::getep_() {
-    return this->ep_.get();
 }
 
 TcpServer::~TcpServer() = default;

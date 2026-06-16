@@ -11,26 +11,28 @@
 #include"InetAddress.h"
 #include"Socket.h"
 
-class Epoll;
+// class Epoll;
 class Channel;
 class TcpServer;
 class TcpConnection;
+class Eventloop;
 
-class TcpServer {
+class TcpServer { // 负责连接管理
 private:
-    std::unique_ptr<Epoll> ep_;
+    // std::unique_ptr<Epoll> ep_;
     std::unique_ptr<Socket> listenSock_;
     std::unique_ptr<Channel> listenChannel_;
     std::unordered_map<int, std::unique_ptr<TcpConnection>> conns_;
     bool initialized_ = false;
+    Eventloop* loop_;
 
     bool handleAccept();
     bool removeConnection(int fd);
 
 public:
-    TcpServer(const std::string& ip, uint16_t port);
+    TcpServer(Eventloop* loop, const std::string& ip, uint16_t port);
     void start();
     void loop();
-    Epoll* getep_();
+    // Epoll* getep_();
     ~TcpServer();
 };
