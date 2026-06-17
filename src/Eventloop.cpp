@@ -1,3 +1,6 @@
+#include<unistd.h>
+#include<vector>
+
 #include "Eventloop.h"
 #include "Epoll.h"
 #include "Channel.h"
@@ -21,5 +24,26 @@ bool Eventloop::removeChannel(Channel* chn) {
 // Epoll* Eventloop::getEpoll() {
 //     return this->ep_.get();
 // }
+
+void Eventloop::setRemoveConnectionCallback(const RemoveConnectionCallback& cb) {
+    this->RemoveConnectionCallback_ = cb;
+}
+
+void Eventloop::loop() {
+    while(1) {
+        std::vector<Channel*> chns = this->poll(-1);
+        if(chns.empty()) {
+            continue;
+        }
+        for(Channel* chn : chns) {
+            int fd = chn->getfd_();
+            bool alive = chn->handleEvent();
+
+            if(!alive && this->RemoveConnectionCallback_) {
+                this->RemoveConnectionCallback_(fd);
+            }
+        }
+    }
+}
 
 Eventloop::~Eventloop() = default;

@@ -186,7 +186,7 @@ bool TcpConnection::handleWrite() {
     return this->refresh();
 }
 bool TcpConnection::handleClose() {
-    printf("clientfd(eventfd = %d) disconnected.\n", this->fd_);
+    printf("clientfd(client fd = %d) disconnected.\n", this->fd_);
     this->peerClosed_ = true;
     return this->refresh();
 }

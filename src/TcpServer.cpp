@@ -44,6 +44,14 @@ TcpServer::TcpServer(Eventloop* loop, const std::string& ip, uint16_t port) : lo
     if(!listenChannel_->update()) {
         return;
     }
+
+    this->loop_->setRemoveConnectionCallback([this](int fd) {
+        // 监听 fd 不是普通客户端连接, 不在 conns_里, TcpServer只应该删除客户端连接
+        if(this->listenSock_ && fd != this->listenSock_->getfd()) {
+            this->removeConnection(fd);
+        }
+    });
+
     this->initialized_ = true;
 }
 
@@ -52,25 +60,25 @@ void TcpServer::start() {
         fprintf(stderr, "TcpServer init failed.\n");
         return;
     }
-    this->loop();
+    this->loop_->loop();
 }
 
-void TcpServer::loop() {
-    while(1) {
-        std::vector<Channel*> chns = this->loop_->poll(-1);
-        if(chns.empty()) {
-            continue;
-        }
-        for(Channel* chn : chns) {
-            int fd = chn->getfd_();
-            bool alive = chn->handleEvent();
+// void TcpServer::loop() {
+//     while(1) {
+//         std::vector<Channel*> chns = this->loop_->poll(-1);
+//         if(chns.empty()) {
+//             continue;
+//         }
+//         for(Channel* chn : chns) {
+//             int fd = chn->getfd_();
+//             bool alive = chn->handleEvent();
 
-            if(!alive && fd != this->listenSock_->getfd()) {
-                removeConnection(fd);
-            }
-        }
-    }
-}
+//             if(!alive && fd != this->listenSock_->getfd()) {
+//                 removeConnection(fd);
+//             }
+//         }
+//     }
+// }
 
 bool TcpServer::handleAccept() {
     while(1) {

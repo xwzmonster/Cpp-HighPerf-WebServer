@@ -13,12 +13,7 @@
 #include<unordered_map>
 #include<vector>
 
-#include"InetAddress.h"
-#include"Socket.h"
-#include"Epoll.h"
-#include"Channel.h"
 #include"TcpServer.h"
-#include"TcpConnection.h"
 #include"Eventloop.h"
 
 int main(int argc, char* argv[]) {

@@ -32,7 +32,7 @@ private:
 public:
     TcpServer(Eventloop* loop, const std::string& ip, uint16_t port);
     void start();
-    void loop();
+    // void loop();
     // Epoll* getep_();
     ~TcpServer();
 };

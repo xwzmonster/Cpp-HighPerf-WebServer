@@ -32,21 +32,67 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
 启动服务端：
 
 ```bash
-./epoll 127.0.0.1 8080
+    ./epoll 127.0.0.1 8080
 ```
 
 启动客户端：
 
 ```bash
-./client 127.0.0.1 8080
+    ./client 127.0.0.1 8080
 ```
 
 ## 基础测试
 
-1. 客户端输入短字符串，确认服务端 echo。
-2. 多开几个客户端，确认多个连接都能工作。
-3. 客户端直接退出，确认服务端不崩溃。
-4. 连续输入多次，确认不会丢数据。
+### 阶段 1C 验证
+
+1. 启动服务端：
+
+```bash
+    cd src
+    ./epoll 127.0.0.1 8080
+```
+
+1. 打开第一个客户端：
+  
+```bash
+    cd src
+    ./client 127.0.0.1 8080
+```
+
+1. 打开第二个客户端：
+
+```bash
+    cd src
+    ./client 127.0.0.1 8080
+```
+
+1. 两个客户端分别输入不同字符串，确认都能收到 echo。
+1. 两个客户端分别按 Ctrl+C 断开。
+1. 服务端应打印 disconnected，且不崩溃。
+1. 断开后可以重新启动客户端，确认服务端仍能继续 accept 新连接。
+
+### 当前通过标准
+
+  1. make 能成功。
+  2. 服务端能正常启动。
+  3. 多客户端能同时连接。
+  4. 多客户端能正常 echo。
+  5. 客户端断开后服务端不崩溃。
+  6. Eventloop::loop() 负责事件等待和事件分发
+
+## 阶段 1C 结构检查
+
+用以下命令检查事件循环是否已经移动到 `Eventloop`：
+
+  ```bash
+    rg -n "TcpServer::loop|Eventloop::loop|poll\\(-1\\)|handleEvent" src
+  ```
+
+  期望结果：
+
+  1. Eventloop::loop 应该存在。
+  2. poll(-1) 和 handleEvent() 应该出现在 Eventloop.cpp 中。
+  3. TcpServer::loop 不应该再作为有效函数存在。
 
 ## 后续压力测试
 

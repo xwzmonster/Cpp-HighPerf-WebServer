@@ -70,24 +70,28 @@
 
 ### 阶段 1C：Eventloop 接管事件循环
 
-目标：让 `Eventloop` 真正负责事件循环和事件分发，`TcpServer` 不再自己写 `while` 循环处理活跃事件。
+  目标：让 `Eventloop` 真正负责事件循环和事件分发，`TcpServer` 不再自己写 `while` 循环处理活跃事件。
 
-计划：
+  已完成：
 
-1. 给 `Eventloop` 提供真正的 `loop()` 函数。
-2. `Eventloop::loop()` 内部调用 `poll(-1)`。
-3. `Eventloop::loop()` 遍历活跃的 `Channel*`。
-4. `Eventloop::loop()` 调用 `Channel::handleEvent()`。
-5. 连接关闭时，仍由 `TcpServer` 负责删除 `TcpConnection`，但删除动作需要通过回调或其他清晰机制触发。
+  1. 给 `Eventloop` 提供真正的 `loop()` 函数。
+  2. `Eventloop::loop()` 内部调用 `poll(-1)`。
+  3. `Eventloop::loop()` 遍历活跃的 `Channel*`。
+  4. `Eventloop::loop()` 调用 `Channel::handleEvent()`。
+  5. 连接关闭时，`Eventloop` 通过回调通知 `TcpServer` 删除连接。
+  6. `TcpServer::start()` 改为调用 `Eventloop::loop()`。
+  7. 连接集合 `conns_` 仍由 `TcpServer` 管理。
 
-完成标准：
+  完成标准：
 
-1. `TcpServer::start()` 不再自己写事件循环。
-2. `TcpServer` 不再直接遍历活跃 `Channel*`。
-3. `Eventloop` 负责等待事件和分发事件。
-4. 多客户端 echo 行为和阶段 1B 完全一致。
-5. 客户端断开后服务端不崩溃。
-6. 已更新 `docs` 和 `development_log`。
+  1. `TcpServer::start()` 不再自己写事件循环。
+  2. `TcpServer` 不再直接遍历活跃 `Channel*`。
+  3. `Eventloop` 负责等待事件和分发事件。
+  4. 多客户端 echo 行为和阶段 1B 完全一致。
+  5. 客户端断开后服务端不崩溃。
+  6. 已更新 `docs` 和 `development_log`。
+
+当前状态：阶段 1C 已完成，然后进入阶段 2A：抽象 `Acceptor`
 
 ## 阶段 2：抽象 Acceptor
 
@@ -160,7 +164,7 @@
 2. 每个 `TcpConnection` 只属于一个固定 `EventLoop`。
 3. 跨线程操作通过任务队列完成。
 
-## 阶段 6：工程化与简历增强
+## 阶段 6：工程化
 
 目标：把项目整理成可展示的工程。
 
@@ -172,4 +176,3 @@
 4. 增加常见问题记录。
 5. 使用 `ab`、`wrk`、自写客户端或 `nc` 进行测试。
 6. 记录 QPS、并发连接数、CPU 占用和瓶颈分析。
-

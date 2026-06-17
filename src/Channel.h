@@ -8,13 +8,14 @@ class Eventloop;
 // 封装“一个 fd 在 epoll 里的状态”. 它保存 fd、想监听的事件、实际发生的事件、回调函数
 class Channel {
 private:
-    int fd_; // Channel拥有的fd, Channel和fd是一对一的关系
+    int fd_; // Channel不拥有 fd, 只保存 fd 值用于事件分发, Channel和fd是一对一的关系
     Eventloop* loop_; // Channel对应的红黑树, Channel与Epoll是多对一的关系, 一个Channel只对应一个Epoll
     bool isInEpoll_; // Channel是否已添加到epoll树上, 如果已添加, 调用 EPOLL_CTL_MOD；否则调用 EPOLL_CTL_ADD
     uint32_t events_; // 需要监听的事件
     uint32_t revents_; // 实际发生的事件(epoll_wait 返回时, 由 Epoll 类把内核返回的具体事件填充到这里)
     
-    typedef std::function<bool()> EventCallback;
+    // typedef std::function<bool()> EventCallback;
+    using EventCallback = std::function<bool()>;
     EventCallback readCallback_;
     EventCallback writeCallback_;
     EventCallback closeCallback_;
