@@ -5,7 +5,7 @@
 建议服务端源文件包含：
 
 ```makefile
-SERVER_SRC = tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp
+SERVER_SRC = tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp Acceptor.cpp
 ```
 
 如果入口文件改名为 `tcpepoll.cpp`，则使用：
@@ -24,7 +24,7 @@ make
 只做语法检查：
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp
+g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp Acceptor.cpp
 ```
 
 ## 运行
@@ -93,6 +93,38 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
   1. Eventloop::loop 应该存在。
   2. poll(-1) 和 handleEvent() 应该出现在 Eventloop.cpp 中。
   3. TcpServer::loop 不应该再作为有效函数存在。
+
+### 阶段 2A 验证
+
+阶段 2A 用于验证 `Acceptor` 是否已经接管监听 socket、监听 Channel 和 accept 逻辑。
+
+  结构检查：
+
+```bash
+  rg -n "Acceptor|listenSock_|listenChannel_|handleAccept|newConnection" src
+```
+
+期望结果：
+
+1. `Acceptor` 持有监听 socket 和监听 `Channel`。
+2. `Acceptor::handleAccept()` 负责 `accept` 新连接。
+3. `TcpServer` 持有 `std::unique_ptr<Acceptor>`。
+4. `TcpServer` 通过 `newConnection()` 创建 `TcpConnection`。
+5. `TcpServer` 不再有效持有 `listenSock_`和 `listenChannel_`。
+
+语法检查：
+
+cd src
+g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp Acceptor.cpp
+
+运行验证：
+
+1. 启动服务端。
+2. 启动三个客户端。
+3. 三个客户端分别发送不同字符串。
+4. 确认三个客户端都能收到 echo。
+5. 三个客户端分别 Ctrl+C 断开。
+6. 服务端应打印 disconnected，且不崩溃。
 
 ## 后续压力测试
 

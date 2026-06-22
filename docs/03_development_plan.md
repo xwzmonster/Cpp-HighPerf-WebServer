@@ -91,24 +91,41 @@
   5. 客户端断开后服务端不崩溃。
   6. 已更新 `docs` 和 `development_log`。
 
-当前状态：阶段 1C 已完成，然后进入阶段 2A：抽象 `Acceptor`
+当前状态：阶段 1C 已完成。下一步进入阶段 2A：抽象 `Acceptor`，只拆监听 socket、监听 Channel 和 accept 逻辑。
 
 ## 阶段 2：抽象 Acceptor
 
 目标：把监听 fd 和接受连接逻辑从 `TcpServer` 中拆出来。
 
-计划：
+### 阶段 2A：新增 Acceptor
+
+目标：让 `Acceptor` 负责监听 socket、监听 Channel 和 accept 循环，让 `TcpServer` 不再直接操作监听 fd。
+
+已完成：
 
 1. 新增 `Acceptor` 类。
-2. `Acceptor` 拥有 listen `Socket` 和 listen `Channel`。
-3. `Acceptor` 内部处理 `accept4`。
-4. `Acceptor` 对外提供 `NewConnectionCallback`。
-5. `TcpServer` 收到新连接回调后创建 `TcpConnection`。
+2. `Acceptor` 持有 listen `Socket`。
+3. `Acceptor` 持有 listen `Channel`。
+4. `Acceptor` 内部处理 `accept4`。
+5. `Acceptor` 对外提供 `NewConnectionCallback`。
+6. `TcpServer` 创建 `Acceptor`。
+7. `TcpServer` 给 `Acceptor` 设置新连接回调。
+8. `TcpServer` 在新连接回调中创建 `TcpConnection`。
+9. `Makefile` 已加入 `Acceptor.cpp`。
+10. 多客户端 echo 和客户端断开测试通过。
 
 完成标准：
 
-1. `TcpServer` 不直接操作 listen socket。
-2. 新连接创建流程更接近 muduo。
+1. `TcpServer` 不再直接持有 `listenSock_`。
+2. `TcpServer` 不再直接持有 `listenChannel_`。
+3. `TcpServer` 不再直接实现 accept 循环。
+4. `Acceptor` 负责监听 fd 的创建、绑定、监听和新连接接收。
+5. 多客户端 echo 行为和阶段 1C 保持一致。
+6. 客户端断开后服务端不崩溃。
+7. `Makefile` 已加入 `Acceptor.cpp`。
+8. 已更新 `docs` 和 `development_log`。
+
+当前状态：阶段 2A 已完成。`TcpServer` 不再有效持有监听 socket 和监听 Channel，监听 fd、监听 Channel 和 accept 循环已经迁移到 `Acceptor`。下一步进入阶段 3A：设计并引入最小 `Buffer`。
 
 ## 阶段 3：完善 Buffer
 

@@ -17,21 +17,20 @@
 4. 阶段 1C：`Eventloop` 接管事件循环和事件分发。
      - 完成标准：`TcpServer::start()` 调用 `Eventloop::loop()`，事件等待和事件分发由 `Eventloop` 完成。
      - 验证方法：多客户端 echo、客户端 Ctrl+C 断开、服务端不崩溃。
+5. 阶段 2A：抽象 `Acceptor`。
+     - 完成标准：`Acceptor` 负责监听 socket、监听 Channel 和 accept 循环；`TcpServer` 不再有效持有监听 socket 和监听 Channel。
+     - 验证方法：包含 `Acceptor.cpp` 的语法检查通过，三客户端 echo 正常，客户端 Ctrl+C 断开后服务端不崩溃。
 
 ## P1：当前必须做
 
-1. 阶段 2：抽象 `Acceptor`。
-    - 完成标准：监听 socket、监听 Channel 和 accept 逻辑从 `TcpServer` 拆出。
-    - 验证方法：服务端能启动，多客户端 echo 行为不变，客户端断开后服务端不崩溃。
-
-2. 阶段 2 后更新构建说明。
-    - 完成标准：`docs/05_build_run_test.md` 和 `src/Makefile` 都包含 `Acceptor.cpp`。
-    - 验证方法：`make clean && make` 成功，语法检查命令包含 `Acceptor.cpp`。
+1. 阶段 3A：设计并引入最小 `Buffer`。
+     - 完成标准：新增 `Buffer` 类，先明确 readable/writable 基本接口，不一次性替换所有读写逻辑。
+     - 验证方法：引入 `Buffer.h` 和 `Buffer.cpp` 后，语法检查通过，现有 echo 行为不变。
 
 ## P2：后续应该做
 
-1. 阶段 3：抽象 `Buffer`。
-     - 完成标准：不再直接依赖简单 `std::string outbuf_` 处理全部读写。
+1. 阶段 3B：用 `Buffer` 替换 `TcpConnection::outbuf_`。
+     - 完成标准：`TcpConnection` 使用输出缓冲对象管理待发送数据。
      - 验证方法：连续发送、多次发送、大一点的数据包都能正常 echo。
 
 2. 阶段 4：增加用户回调接口。
