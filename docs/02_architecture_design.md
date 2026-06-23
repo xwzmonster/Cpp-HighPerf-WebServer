@@ -24,6 +24,7 @@
                    -> client Socket
                    -> client Channel
                    -> outbuf_
+     -> Buffer
 ```
 
 ## 当前职责划分

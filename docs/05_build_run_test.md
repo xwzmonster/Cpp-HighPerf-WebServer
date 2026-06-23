@@ -5,7 +5,7 @@
 建议服务端源文件包含：
 
 ```makefile
-SERVER_SRC = tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp Acceptor.cpp
+SERVER_SRC = tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp Acceptor.cpp Buffer.cpp
 ```
 
 如果入口文件改名为 `tcpepoll.cpp`，则使用：
@@ -24,7 +24,7 @@ make
 只做语法检查：
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp Acceptor.cpp
+g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp Eventloop.cpp Acceptor.cpp Buffer.cpp
 ```
 
 ## 运行
@@ -104,14 +104,6 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
   rg -n "Acceptor|listenSock_|listenChannel_|handleAccept|newConnection" src
 ```
 
-期望结果：
-
-1. `Acceptor` 持有监听 socket 和监听 `Channel`。
-2. `Acceptor::handleAccept()` 负责 `accept` 新连接。
-3. `TcpServer` 持有 `std::unique_ptr<Acceptor>`。
-4. `TcpServer` 通过 `newConnection()` 创建 `TcpConnection`。
-5. `TcpServer` 不再有效持有 `listenSock_`和 `listenChannel_`。
-
 语法检查：
 
 cd src
@@ -125,6 +117,83 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
 4. 确认三个客户端都能收到 echo。
 5. 三个客户端分别 Ctrl+C 断开。
 6. 服务端应打印 disconnected，且不崩溃。
+
+期望结果：
+
+1. `Acceptor` 持有监听 socket 和监听 `Channel`。
+2. `Acceptor::handleAccept()` 负责 `accept` 新连接。
+3. `TcpServer` 持有 `std::unique_ptr<Acceptor>`。
+4. `TcpServer` 通过 `newConnection()` 创建 `TcpConnection`。
+5. `TcpServer` 不再有效持有 `listenSock_`和 `listenChannel_`。
+
+### 阶段 3A 验证
+
+阶段 3A 用于验证最小 `Buffer` 类已经加入工程，但暂不替换 `TcpConnection::outbuf_`。
+
+ 结构检查：
+
+```bash
+  rg -n "class Buffer|Buffer::append|Buffer::retrieve|Buffer.cpp|outbuf_" src
+```
+
+期望结果：
+
+1. Buffer.h 中存在 Buffer 类。
+2. Buffer.cpp 中实现 append()、retrieve()、retrieveAll()。
+3. Makefile 的 SERVER_SRC 包含 Buffer.cpp。
+4. TcpConnection 暂时仍使用 std::string outbuf_，阶段 3B 再替换。
+
+语法检查：
+
+```bash
+  cd src
+  g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp
+  Eventloop.cpp Acceptor.cpp Buffer.cpp
+```
+
+期望结果：
+
+1. `Acceptor` 持有监听 socket 和监听 `Channel`。
+2. `Acceptor::handleAccept()` 负责 `accept` 新连接。
+3. `TcpServer` 持有 `std::unique_ptr<Acceptor>`。
+4. `TcpServer` 通过 `newConnection()` 创建 `TcpConnection`。
+5. `TcpServer` 不再有效持有 `listenSock_`和 `listenChannel_`。
+
+### 阶段 3B 验证
+
+  阶段 3B 用于验证 `TcpConnection` 是否已经使用 `Buffer` 替换原来的 `std::string outbuf_`。
+
+  结构检查：
+
+```bash
+  rg -n "outbuf_|outputBuffer_|Buffer" src/TcpConnection.h src/TcpConnection.cpp src/Buffer.h src/Buffer.cpp
+```
+
+期望结果：
+
+1. TcpConnection.h 中不再有效持有 std::string outbuf_。
+2. TcpConnection.h 中存在 Buffer outputBuffer_。
+3. TcpConnection::handleRead() 把读取到的数据追加到 outputBuffer_。
+4. TcpConnection::tryWrite() 从 outputBuffer_ 取数据发送。
+5. TcpConnection::refresh() 根据 outputBuffer_.readableBytes() 判断是否监听 EPOLLOUT。
+
+语法检查：
+
+```bash
+  cd src
+  g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socket.cpp Epoll.cpp Channel.cpp TcpServer.cpp TcpConnection.cpp
+  Eventloop.cpp Acceptor.cpp Buffer.cpp
+```
+
+运行验证：
+
+1. 启动服务端。
+2. 启动三个客户端。
+3. 三个客户端分别发送短字符串。
+4. 三个客户端连续发送多条消息。
+5. 发送一条稍长字符串。
+6. 确认所有客户端都能收到 echo。
+7. 客户端 Ctrl+C 断开后，服务端不崩溃。
 
 ## 后续压力测试
 

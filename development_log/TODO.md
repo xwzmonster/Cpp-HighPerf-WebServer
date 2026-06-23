@@ -21,17 +21,21 @@
      - 完成标准：`Acceptor` 负责监听 socket、监听 Channel 和 accept 循环；`TcpServer` 不再有效持有监听 socket 和监听 Channel。
      - 验证方法：包含 `Acceptor.cpp` 的语法检查通过，三客户端 echo 正常，客户端 Ctrl+C 断开后服务端不崩溃。
 
+6. 阶段 3A：新增最小 `Buffer` 并接入构建。
+     - 完成标准：`Buffer.h`、`Buffer.cpp` 已新增；`Buffer.cpp` 已加入 `Makefile`；`make` 和语法检查通过；原有多客户端 echo 行为不变。
+     - 验证方法：三客户端 echo 测试通过，客户端 Ctrl+C 断开后服务端不崩溃。
+
 ## P1：当前必须做
 
-1. 阶段 3A：设计并引入最小 `Buffer`。
-     - 完成标准：新增 `Buffer` 类，先明确 readable/writable 基本接口，不一次性替换所有读写逻辑。
-     - 验证方法：引入 `Buffer.h` 和 `Buffer.cpp` 后，语法检查通过，现有 echo 行为不变。
+1. 阶段 3B：用 `Buffer` 替换 `TcpConnection::outbuf_`。
+     - 完成标准：`TcpConnection` 使用 `Buffer outputBuffer_` 管理待发送数据，不再有效使用 `std::string outbuf_`。
+     - 验证方法：单客户端、多客户端、连续发送、稍长字符串发送、客户端 Ctrl+C 断开均正常。
 
 ## P2：后续应该做
 
-1. 阶段 3B：用 `Buffer` 替换 `TcpConnection::outbuf_`。
-     - 完成标准：`TcpConnection` 使用输出缓冲对象管理待发送数据。
-     - 验证方法：连续发送、多次发送、大一点的数据包都能正常 echo。
+1. 阶段 3C：引入输入缓冲 `inputBuffer_`。
+     - 完成标准：`TcpConnection` 使用 `Buffer inputBuffer_` 保存读到但尚未处理的数据。
+     - 验证方法：连续发送、多次读取、大一点的数据包都能稳定处理。
 
 2. 阶段 4：增加用户回调接口。
      - 完成标准：echo 业务从 `TcpConnection` 内部分离。

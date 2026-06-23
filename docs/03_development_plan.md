@@ -129,21 +129,50 @@
 
 ## 阶段 3：完善 Buffer
 
-目标：替换直接使用 `std::string outbuf_` 的粗糙写法。
+目标：先新增 `Buffer` 类，并接入构建系统，暂时不替换 `TcpConnection` 的读写逻辑。
 
-计划：
+已完成：
 
-1. 新增 `Buffer` 类。
-2. 支持 readable/writable/prepend 区间。
-3. 支持从 fd 读取数据。
-4. 支持向 fd 写出数据。
-5. `TcpConnection` 拥有 `inputBuffer_` 和 `outputBuffer_`。
+1. 新增 `Buffer.h`。
+2. 新增 `Buffer.cpp`。
+3. `Buffer` 内部使用 `std::vector<char>` 管理连续内存。
+4. `Buffer` 使用 `readerIndex_` 表示可读数据起点。
+5. `Buffer` 使用 `writerIndex_` 表示可写数据起点。
+6. `Buffer::append()` 能把外部数据复制到缓冲区。
+7. `Buffer::retrieve()` 能消费已读数据。
+8. `Buffer::retrieveAll()` 能清空可读数据。
+9. `Makefile` 已加入 `Buffer.cpp`。
+10. 当前暂不替换 `TcpConnection::outbuf_`。
 
 完成标准：
 
-1. 支持任意二进制数据。
-2. 不依赖 `%s` 风格字符串输出。
-3. 大包和半包处理基础更清晰。
+1. `make` 能成功。
+2. 包含 `Buffer.cpp` 的语法检查通过。
+3. 服务端原有 echo 行为不变。
+4. 多客户端连接、发送、回显、断开仍然正常。
+
+当前状态：阶段 3A 已完成。`Buffer` 已加入工程并通过构建、语法检查和三客户端 echo 运行验证。下一步进入阶段 3B：用 `Buffer` 替换 `TcpConnection::outbuf_`。
+
+### 阶段 3B：用 Buffer 替换 TcpConnection 输出缓冲
+
+目标：让 `TcpConnection` 使用 `Buffer` 管理待发送数据，替换当前的 `std::string outbuf_`。
+
+计划：
+
+1. `TcpConnection.h` 引入 `Buffer.h`。
+2. 将 `std::string outbuf_` 替换为 `Buffer outputBuffer_`。
+3. 修改 `TcpConnection::handleRead()`，把读取到的数据 append 到 `outputBuffer_`。
+4. 修改 `TcpConnection::tryWrite()`，从 `outputBuffer_` 中取出可读数据发送。
+5. 修改 `TcpConnection::refresh()`，根据 `outputBuffer_.readableBytes()` 判断是否监听 `EPOLLOUT`。
+6. 保持 echo 行为不变。
+
+完成标准：
+
+1. `make` 能成功。
+2. 多客户端 echo 正常。
+3. 客户端 Ctrl+C 断开后服务端不崩溃。
+4. 连续发送多条消息正常。
+5. 发送稍大一点的数据仍能正常回显。
 
 ## 阶段 4：用户回调接口
 
