@@ -174,6 +174,29 @@
 4. 连续发送多条消息正常。
 5. 发送稍大一点的数据仍能正常回显。
 
+当前状态：阶段 3B 已完成。`TcpConnection` 已使用 `Buffer outputBuffer_` 替换原来的 `std::string outbuf_`，三客户端 echo 和稍长字符串 echo 验
+  证通过。下一步进入阶段 3C：引入 `Buffer inputBuffer_`。
+
+### 阶段 3C：引入输入缓冲 inputBuffer_
+
+目标：让 `TcpConnection` 同时拥有输入缓冲和输出缓冲。
+
+计划：
+
+1. 在 `TcpConnection` 中新增 `Buffer inputBuffer_`。
+2. `handleRead()` 先把 socket 读到的数据追加到 `inputBuffer_`。
+3. 当前 echo 业务中，把 `inputBuffer_` 的可读数据追加到 `outputBuffer_`。
+4. 处理完后清空或消费 `inputBuffer_`。
+5. 保持现有 echo 行为不变。
+
+完成标准：
+
+1. `make` 能成功。
+2. 三客户端 echo 正常。
+3. 连续发送正常。
+4. 稍长字符串 echo 正常。
+5. 客户端断开后服务端不崩溃。
+
 ## 阶段 4：用户回调接口
 
 目标：让业务逻辑从 `TcpConnection` 内部分离。

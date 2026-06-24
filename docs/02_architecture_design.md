@@ -23,7 +23,7 @@
               -> TcpConnection
                    -> client Socket
                    -> client Channel
-                   -> outbuf_
+                   -> outputBuffer_
      -> Buffer
 ```
 

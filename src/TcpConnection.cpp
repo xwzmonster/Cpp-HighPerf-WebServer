@@ -11,10 +11,10 @@
 #include"Socket.h"
 
 bool TcpConnection::tryWrite() {
-    if(this->outbuf_.empty()) {
+    if(this->outputBuffer_.readableBytes() == 0) {
         return true;
     }
-    std::string& out = this->outbuf_;
+    // std::string& out = this->outputBuffer_;
 
     /*
         把用户态outbuf里的数据, 尽可能写入 fd 对应 socket 的内核发送缓冲区
@@ -33,7 +33,7 @@ bool TcpConnection::tryWrite() {
                         v
                 客户端用户态 buffer
     */
-    while(!out.empty()) {
+    while(outputBuffer_.readableBytes() > 0) {
         // data()是std::string类的另一个成员函数, 它返回指向字符串内容的指针
         // s.data() 返回一个 const char* 类型的指针, 指向字符串的第一个字符
         // size()是std::string类的一个成员函数, 用于获取字符串中的字符数, 不包括\0
@@ -44,9 +44,9 @@ bool TcpConnection::tryWrite() {
                 MSG_NOSIGNAL
                 可以避免 SIGPIPE 杀死服务器进程
         */
-        ssize_t n = send(this->fd_, out.data(), out.size(), MSG_NOSIGNAL);
+        ssize_t n = send(this->fd_, outputBuffer_.peek(), outputBuffer_.readableBytes(), MSG_NOSIGNAL);
         if(n > 0) {
-            out.erase(0, n);
+            this->outputBuffer_.retrieve(static_cast<size_t>(n));
             continue;
         }
 
@@ -67,7 +67,7 @@ bool TcpConnection::tryWrite() {
 // 根据当前是否还有数据没发完，决定是否继续监听 EPOLLOUT
 bool TcpConnection::refresh() {
     // 对端关闭, 且数据发送完
-    if(this->peerClosed_ && this->outbuf_.empty()) {
+    if(this->peerClosed_ && this->outputBuffer_.readableBytes() == 0) {
         return false;
     }
 
@@ -76,7 +76,7 @@ bool TcpConnection::refresh() {
     if(!this->peerClosed_) {
         events |= EPOLLIN | EPOLLRDHUP; 
     }
-    if(!this->outbuf_.empty()) {
+    if(this->outputBuffer_.readableBytes() > 0) {
         events |= EPOLLOUT;
     } 
     channel_->set__events_(events);
@@ -87,7 +87,7 @@ TcpConnection::TcpConnection(Eventloop* loop, int fd)
         : fd_(fd), 
         sock_(std::make_unique<Socket>(fd)), 
         channel_(std::make_unique<Channel>(loop, fd)),
-        outbuf_(), 
+        outputBuffer_(), 
         peerClosed_(false) {
     sock_->SetTCPNoDelay(true);
 
@@ -152,8 +152,8 @@ bool TcpConnection::handleRead() {
             */
             printf("recv from fd = %d, len = %zd, content = %.*s\n", this->fd_, n, (int)n, buf);
             fflush(stdout);
-            // 把 buf 里面前 n 个字节的数据, 安全地追加（拼接）到 outbuf_ 这个字符串的末尾
-            this->outbuf_.append(buf, n);
+            // 把 buf 里面前 n 个字节的数据, 安全地追加（拼接）到 outputBuffer_ 这个字符串的末尾
+            this->outputBuffer_.append(buf, n);
             needWrite = true;
         } else if(n == 0) {
             // 对端正常关闭写端

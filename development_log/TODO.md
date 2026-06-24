@@ -25,19 +25,19 @@
      - 完成标准：`Buffer.h`、`Buffer.cpp` 已新增；`Buffer.cpp` 已加入 `Makefile`；`make` 和语法检查通过；原有多客户端 echo 行为不变。
      - 验证方法：三客户端 echo 测试通过，客户端 Ctrl+C 断开后服务端不崩溃。
 
+7. 1. 阶段 3B：用 `Buffer outputBuffer_` 替换 `TcpConnection::outbuf_`。
+     - 完成标准：`TcpConnection` 使用 `Buffer outputBuffer_` 管理待发送数据。
+     - 验证方法：三客户端 echo、稍长字符串 echo、客户端 Ctrl+C 断开均正常。
+
 ## P1：当前必须做
 
-1. 阶段 3B：用 `Buffer` 替换 `TcpConnection::outbuf_`。
-     - 完成标准：`TcpConnection` 使用 `Buffer outputBuffer_` 管理待发送数据，不再有效使用 `std::string outbuf_`。
-     - 验证方法：单客户端、多客户端、连续发送、稍长字符串发送、客户端 Ctrl+C 断开均正常。
+1. 阶段 3C：引入输入缓冲 `inputBuffer_`。
+     - 完成标准：`TcpConnection` 同时拥有 `inputBuffer_` 和 `outputBuffer_`。
+     - 验证方法：短消息、连续消息、稍长字符串 echo 均正常，客户端 Ctrl+C 断开后服务端不崩溃。
 
 ## P2：后续应该做
 
-1. 阶段 3C：引入输入缓冲 `inputBuffer_`。
-     - 完成标准：`TcpConnection` 使用 `Buffer inputBuffer_` 保存读到但尚未处理的数据。
-     - 验证方法：连续发送、多次读取、大一点的数据包都能稳定处理。
-
-2. 阶段 4：增加用户回调接口。
+1. 阶段 4：增加用户回调接口。
      - 完成标准：echo 业务从 `TcpConnection` 内部分离。
      - 验证方法：可以在入口文件或业务回调中定义 echo 行为。
 

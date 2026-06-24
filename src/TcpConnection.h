@@ -9,12 +9,14 @@
 #include<vector>
 #include<memory>
 #include"InetAddress.h"
+#include"Buffer.h"
 
 class TcpServer;
 class Channel;
 // class Epoll;
 class Socket;
 class Eventloop;
+class Buffer;
 
 // 保存每个客户端连接的状态
 class TcpConnection {
@@ -23,7 +25,8 @@ private:
     int fd_;
     std::unique_ptr<Socket> sock_;
     std::unique_ptr<Channel> channel_;
-    std::string outbuf_; // 输出缓冲区
+    // std::string outbuf_; // 输出缓冲区
+    Buffer outputBuffer_;
     bool peerClosed_; // 对端关闭写端后, 先把待发送数据发完再关闭连接
     
     bool tryWrite();
