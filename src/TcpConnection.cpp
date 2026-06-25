@@ -87,6 +87,7 @@ TcpConnection::TcpConnection(Eventloop* loop, int fd)
         : fd_(fd), 
         sock_(std::make_unique<Socket>(fd)), 
         channel_(std::make_unique<Channel>(loop, fd)),
+        inputBuffer_(),
         outputBuffer_(), 
         peerClosed_(false) {
     sock_->SetTCPNoDelay(true);
@@ -152,8 +153,10 @@ bool TcpConnection::handleRead() {
             */
             printf("recv from fd = %d, len = %zd, content = %.*s\n", this->fd_, n, (int)n, buf);
             fflush(stdout);
-            // 把 buf 里面前 n 个字节的数据, 安全地追加（拼接）到 outputBuffer_ 这个字符串的末尾
-            this->outputBuffer_.append(buf, n);
+            this->inputBuffer_.append(buf, static_cast<size_t>(n));
+            // 把 buf 里面前 n 个字节的数据, 安全地追加（拼接）到 inputBuffer_ 这个字符串的末尾
+            this->outputBuffer_.append(this->inputBuffer_.peek(), this->inputBuffer_.readableBytes());
+            this->inputBuffer_.retrieveAll();
             needWrite = true;
         } else if(n == 0) {
             // 对端正常关闭写端

@@ -197,6 +197,33 @@
 4. 稍长字符串 echo 正常。
 5. 客户端断开后服务端不崩溃。
 
+### 阶段 3C 验证
+
+阶段 3C 用于验证 `TcpConnection` 是否已经同时拥有输入缓冲和输出缓冲。
+
+结构检查：
+
+```bash
+  rg -n "inputBuffer_|outputBuffer_|retrieveAll|append" src/TcpConnection.h src/TcpConnection.cpp
+```
+
+期望结果：
+
+1. TcpConnection.h 中存在 Buffer inputBuffer_。
+2. TcpConnection.h 中存在 Buffer outputBuffer_。
+3. handleRead() 先追加数据到 inputBuffer_。
+4. 当前 echo 逻辑中，inputBuffer_ 的可读数据会追加到 outputBuffer_。
+5. 处理完成后会消费或清空 inputBuffer_。
+
+运行验证：
+
+1. 启动服务端。
+2. 启动三个客户端。
+3. 分别发送短字符串。
+4. 分别发送 40、120、240 字节左右的字符串。
+5. 确认所有客户端都能收到 echo。
+6. Ctrl+C 断开后服务端不崩溃。
+
 ## 阶段 4：用户回调接口
 
 目标：让业务逻辑从 `TcpConnection` 内部分离。

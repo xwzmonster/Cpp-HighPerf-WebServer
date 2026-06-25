@@ -96,12 +96,25 @@ int main(int argc, char* argv[]) {
     for(int i = 0; i < 200000; i++) {
         memset(buf, 0, sizeof(buf));
         printf("input: ");
-        if(scanf("%1023s", buf) != 1) {
+        // if(scanf("%1023s", buf) != 1) {
+        //     printf("input closed.\n");
+        //     break;
+        // }
+        if(fgets(buf, sizeof(buf), stdin) == NULL) {
             printf("input closed.\n");
             break;
         }
 
         size_t len = strlen(buf);
+        // 去掉 fgets 读进来的换行符
+        if(len > 0 && buf[len - 1] == '\n') {
+            buf[len - 1] = '\0';
+            len--;
+        }
+        if(len == 0) {
+            continue;
+        }
+
         if(!sendAll(sockfd, buf, len)) {
             perror("send: ");
             printf("send() failed.\n");

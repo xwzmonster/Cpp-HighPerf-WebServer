@@ -25,8 +25,10 @@ private:
     int fd_;
     std::unique_ptr<Socket> sock_;
     std::unique_ptr<Channel> channel_;
+
+    Buffer inputBuffer_; // “从 socket 读到但还没被业务处理的数据”
     // std::string outbuf_; // 输出缓冲区
-    Buffer outputBuffer_;
+    Buffer outputBuffer_; // “准备发送但还没完全写入内核的数据”
     bool peerClosed_; // 对端关闭写端后, 先把待发送数据发完再关闭连接
     
     bool tryWrite();

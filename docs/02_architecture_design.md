@@ -2,9 +2,7 @@
 
 ## 当前架构
 
-当前项目已经完成到阶段 2A：抽象 `Acceptor`。
-
-`Eventloop` 负责事件循环和事件分发, `Acceptor` 负责监听 socket、监听 Channel 和 accept 新连接, `TcpServer` 负责连接集合和连接生命周期。
+当前项目已经完成到阶段 3C：`TcpConnection` 已同时拥有输入缓冲 `inputBuffer_` 和输出缓冲 `outputBuffer_`。
 
 ```text
   main
@@ -23,6 +21,7 @@
               -> TcpConnection
                    -> client Socket
                    -> client Channel
+                   -> inputBuffer_
                    -> outputBuffer_
      -> Buffer
 ```

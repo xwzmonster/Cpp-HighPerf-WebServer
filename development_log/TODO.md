@@ -29,17 +29,21 @@
      - 完成标准：`TcpConnection` 使用 `Buffer outputBuffer_` 管理待发送数据。
      - 验证方法：三客户端 echo、稍长字符串 echo、客户端 Ctrl+C 断开均正常。
 
+8. 阶段 3C：引入输入缓冲 `inputBuffer_`。
+     - 完成标准：`TcpConnection` 同时拥有 `inputBuffer_` 和 `outputBuffer_`。
+     - 验证方法：三客户端 echo、40/120/240 字节字符串 echo、客户端 Ctrl+C 断开均正常。
+
 ## P1：当前必须做
 
-1. 阶段 3C：引入输入缓冲 `inputBuffer_`。
-     - 完成标准：`TcpConnection` 同时拥有 `inputBuffer_` 和 `outputBuffer_`。
-     - 验证方法：短消息、连续消息、稍长字符串 echo 均正常，客户端 Ctrl+C 断开后服务端不崩溃。
+1. 阶段 4A：引入最小用户回调接口。
+     - 完成标准：可以在 `TcpServer` 或入口文件中设置消息回调，echo 业务不再写死在 `TcpConnection::handleRead()`。
+     - 验证方法：短消息、连续消息、稍长字符串 echo 均正常，客户端断开后服务端不崩溃。
 
 ## P2：后续应该做
 
-1. 阶段 4：增加用户回调接口。
-     - 完成标准：echo 业务从 `TcpConnection` 内部分离。
-     - 验证方法：可以在入口文件或业务回调中定义 echo 行为。
+1. 阶段 4B：完善连接回调和关闭回调。
+     - 完成标准：连接建立、消息到达、连接关闭都能通过回调通知上层业务。
+     - 验证方法：服务端能清晰打印连接建立、消息到达、连接关闭事件。
 
 ## P3：以后做
 

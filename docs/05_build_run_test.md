@@ -195,6 +195,28 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
 6. 确认所有客户端都能收到 echo。
 7. 客户端 Ctrl+C 断开后，服务端不崩溃。
 
+### 阶段 3C 验证
+
+结构检查：
+
+```bash
+  rg -n "inputBuffer_|outputBuffer_|retrieveAll|append" src/TcpConnection.h src/TcpConnection.cpp
+```
+
+期望结果：
+
+1. TcpConnection.h 中存在 Buffer inputBuffer_。
+2. TcpConnection.h 中存在 Buffer outputBuffer_。
+3. handleRead() 先追加数据到 inputBuffer_。
+4. inputBuffer_ 的可读数据会追加到 outputBuffer_。
+5. 处理完成后会清空或消费 inputBuffer_。
+
+运行验证：
+
+1. 三客户端 echo 正常。
+2. 40、120、240 字节字符串 echo 正常。
+3. 客户端 Ctrl+C 断开后服务端不崩溃。
+
 ## 后续压力测试
 
 可使用以下方式逐步增加压力：
