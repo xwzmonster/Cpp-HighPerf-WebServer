@@ -8,6 +8,8 @@
 #include<unordered_map>
 #include<vector>
 #include<memory>
+#include<functional>
+
 #include"InetAddress.h"
 // #include"Socket.h"
 
@@ -17,8 +19,22 @@ class TcpServer;
 class TcpConnection;
 class Eventloop;
 class Acceptor;
+class Buffer;
 
 class TcpServer { // 负责连接管理, 创建conn, 移除conn
+public:
+    TcpServer(Eventloop* loop, const std::string& ip, uint16_t port);
+    void start();
+    // void loop();
+    // Epoll* getep_();
+
+    using MessageCallback = std::function<void(TcpConnection*, Buffer*)>;
+    
+    void setMessageCallback(const MessageCallback& cb);
+
+    void newConnection(int clientfd, const InetAddress& clientaddr);
+    ~TcpServer();
+
 private:
     // std::unique_ptr<Epoll> ep_;
     // std::unique_ptr<Socket> listenSock_;
@@ -28,14 +44,9 @@ private:
     Eventloop* loop_;
     std::unique_ptr<Acceptor> acceptor_;
 
+    MessageCallback messageCallback_;
+
     // bool handleAccept();
     bool removeConnection(int fd);
 
-public:
-    TcpServer(Eventloop* loop, const std::string& ip, uint16_t port);
-    void start();
-    // void loop();
-    // Epoll* getep_();
-    void newConnection(int clientfd, const InetAddress& clientaddr);
-    ~TcpServer();
 };

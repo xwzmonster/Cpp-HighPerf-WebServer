@@ -8,6 +8,8 @@
 #include<unordered_map>
 #include<vector>
 #include<memory>
+#include<functional>
+
 #include"InetAddress.h"
 #include"Buffer.h"
 
@@ -20,6 +22,20 @@ class Buffer;
 
 // 保存每个客户端连接的状态
 class TcpConnection {
+public: 
+    TcpConnection(Eventloop* loop, int fd);
+    ~TcpConnection();
+
+    using MessageCallback = std::function<void(TcpConnection*, Buffer*)>;
+
+    bool handleRead();
+    bool handleWrite();
+    bool handleClose();
+    bool handleError();
+
+    void setMessageCallback(const MessageCallback& cb);
+    void send(const char* data, size_t len);
+
 private:
     // TcpServer* server_;
     int fd_;
@@ -33,13 +49,5 @@ private:
     
     bool tryWrite();
     bool refresh(); // 根据当前是否还有数据没发完，决定是否继续监听 EPOLLOUT
-
-public: 
-    TcpConnection(Eventloop* loop, int fd);
-    ~TcpConnection();
-
-    bool handleRead();
-    bool handleWrite();
-    bool handleClose();
-    bool handleError();
+    MessageCallback messageCallback_;
 };

@@ -2,7 +2,8 @@
 
 ## 当前架构
 
-当前项目已经完成到阶段 3C：`TcpConnection` 已同时拥有输入缓冲 `inputBuffer_` 和输出缓冲 `outputBuffer_`。
+当前项目已经完成到阶段 4A：`TcpConnection` 已同时拥有输入缓冲、输出缓冲和最小消息回调 `MessageCallback`，echo 业务已经从
+  `TcpConnection::handleRead()` 移动到入口文件。
 
 ```text
   main
@@ -23,6 +24,7 @@
                    -> client Channel
                    -> inputBuffer_
                    -> outputBuffer_
+                   -> MessageCallback
      -> Buffer
 ```
 
@@ -84,15 +86,9 @@ main
   6. TcpConnection 负责单个客户端连接的读写和关闭状态。
   7. 单线程阶段不加锁, 多线程阶段再引入线程归属和跨线程任务队列。
 
-## 下一阶段目标：Buffer
+## 下一阶段目标：ConnectionCallback
 
-阶段 3 将抽象 Buffer：
-
-  TcpConnection
-    -> inputBuffer_
-    -> outputBuffer_
-
-阶段 3 完成后，TcpConnection 不再只依赖简单的 std::string outbuf_ 处理读写数据。
+下一阶段只增加连接建立回调，让业务层能感知新连接建立。暂时不做关闭回调，不进入多线程 Reactor。
 
 ## muduo 风格目标架构
 

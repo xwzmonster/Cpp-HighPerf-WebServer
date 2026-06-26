@@ -217,6 +217,32 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
 2. 40、120、240 字节字符串 echo 正常。
 3. 客户端 Ctrl+C 断开后服务端不崩溃。
 
+### 阶段 4A 验证
+
+结构检查：
+
+```bash
+  rg -n "MessageCallback|setMessageCallback|messageCallback_|::send" src/TcpServer.h src/TcpServer.cpp src/TcpConnection.h src/TcpConnection.cpp src/tcpepoll_02.cpp
+```
+
+期望结果：
+
+1. TcpServer 能保存 MessageCallback。
+2. TcpConnection 能保存 MessageCallback。
+3. TcpServer::newConnection() 会把消息回调设置到新连接。
+4. TcpConnection::handleRead() 读到数据后调用消息回调。
+5. tcpepoll_02.cpp 中通过 lambda 设置 echo 业务。
+6. TcpConnection::tryWrite() 使用 ::send(...) 调用系统发送接口。
+
+运行验证：
+
+1. cd src && make
+2. 启动服务端：./epoll 127.0.0.1 8080
+3. 启动三个客户端：./client 127.0.0.1 8080
+4. 分别发送短字符串和稍长字符串。
+5. 确认所有客户端都能收到 echo。
+6. Ctrl+C 断开客户端后，服务端不崩溃。
+
 ## 后续压力测试
 
 可使用以下方式逐步增加压力：

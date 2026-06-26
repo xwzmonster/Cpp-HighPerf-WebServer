@@ -4,6 +4,9 @@
 #include<unistd.h>
 #include<sys/epoll.h>
 #include<unordered_map>
+#include <sys/types.h>
+#include<sys/socket.h>
+
 
 #include"TcpConnection.h"
 #include"TcpServer.h"
@@ -44,7 +47,7 @@ bool TcpConnection::tryWrite() {
                 MSG_NOSIGNAL
                 可以避免 SIGPIPE 杀死服务器进程
         */
-        ssize_t n = send(this->fd_, outputBuffer_.peek(), outputBuffer_.readableBytes(), MSG_NOSIGNAL);
+        ssize_t n = ::send(this->fd_, outputBuffer_.peek(), outputBuffer_.readableBytes(), MSG_NOSIGNAL);
         if(n > 0) {
             this->outputBuffer_.retrieve(static_cast<size_t>(n));
             continue;
@@ -153,10 +156,19 @@ bool TcpConnection::handleRead() {
             */
             printf("recv from fd = %d, len = %zd, content = %.*s\n", this->fd_, n, (int)n, buf);
             fflush(stdout);
+
             this->inputBuffer_.append(buf, static_cast<size_t>(n));
-            // 把 buf 里面前 n 个字节的数据, 安全地追加（拼接）到 inputBuffer_ 这个字符串的末尾
-            this->outputBuffer_.append(this->inputBuffer_.peek(), this->inputBuffer_.readableBytes());
-            this->inputBuffer_.retrieveAll();
+            if(this->messageCallback_) {
+                messageCallback_(this, &inputBuffer_);
+            } else {
+                outputBuffer_.append(inputBuffer_.peek(), inputBuffer_.readableBytes());
+                inputBuffer_.retrieveAll();
+            }
+
+            // // 把 buf 里面前 n 个字节的数据, 安全地追加（拼接）到 inputBuffer_ 这个字符串的末尾
+            // this->outputBuffer_.append(this->inputBuffer_.peek(), this->inputBuffer_.readableBytes());
+            // this->inputBuffer_.retrieveAll();
+
             needWrite = true;
         } else if(n == 0) {
             // 对端正常关闭写端
@@ -195,4 +207,14 @@ bool TcpConnection::handleClose() {
 }
 bool TcpConnection::handleError() {
     return false;
+}
+
+void TcpConnection::setMessageCallback(const MessageCallback& cb) {
+    this->messageCallback_ = cb;
+}
+
+void TcpConnection::send(const char* data, size_t len) {
+    this->outputBuffer_.append(data, len);
+    tryWrite();
+    refresh();
 }

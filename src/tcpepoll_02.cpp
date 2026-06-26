@@ -15,6 +15,8 @@
 
 #include"TcpServer.h"
 #include"Eventloop.h"
+#include"TcpConnection.h"
+#include"Buffer.h"
 
 int main(int argc, char* argv[]) {
     if(argc != 3) {
@@ -31,6 +33,12 @@ int main(int argc, char* argv[]) {
     }
     Eventloop loop;
     TcpServer server(&loop, argv[1], static_cast<uint16_t>(port));
+    
+    server.setMessageCallback([](TcpConnection* conn, Buffer* buf) {
+        conn->send(buf->peek(), buf->readableBytes());
+        buf->retrieveAll();
+    });
+
     server.start();
     return 0;
 }

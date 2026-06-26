@@ -241,6 +241,27 @@
 1. `TcpConnection` 只负责网络连接，不写死 echo 业务。
 2. 可以很容易替换成其他业务。
 
+### 阶段 4A：最小 MessageCallback
+
+目标：先只引入消息回调，让 echo 业务从 `TcpConnection::handleRead()` 移动到入口文件。
+
+  已完成：
+
+1. `TcpServer` 定义并保存 `MessageCallback`。
+2. `TcpConnection` 定义并保存 `MessageCallback`。
+3. `TcpServer::newConnection()` 创建连接后下发消息回调。
+4. `TcpConnection::handleRead()` 读到数据后触发消息回调。
+5. `tcpepoll_02.cpp` 通过 lambda 设置 echo 业务。
+6. `TcpConnection::tryWrite()` 中使用 `::send(...)` 调用 Linux 系统调用。
+
+完成标准：
+
+1. `make` 能成功。
+2. 三客户端 echo 正常。
+3. 稍长字符串 echo 正常。
+4. 客户端 Ctrl+C 断开后服务端不崩溃。
+5. echo 业务不再写死在 `TcpConnection::handleRead()` 中。
+
 ## 阶段 5：多线程 Reactor
 
 目标：主 Reactor 接受连接，子 Reactor 处理连接读写。

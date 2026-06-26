@@ -126,10 +126,18 @@ bool TcpServer::removeConnection(int fd) {
     return true;
 }
 
+void TcpServer::setMessageCallback(const MessageCallback& cb) {
+    this->messageCallback_ = cb;
+}
+
 void TcpServer::newConnection(int clientfd, const InetAddress& clientaddr) {
     std::string ip = clientaddr.get_str_ip();
     printf("new connection(clientfd = %d, ip = %s, port = %d)\n", clientfd, ip.c_str(), clientaddr.getport());
     this->conns_[clientfd] = std::make_unique<TcpConnection>(this->loop_, clientfd);
+
+    if(this->messageCallback_) {
+        this->conns_[clientfd]->setMessageCallback(this->messageCallback_);
+    }
 }
 
 TcpServer::~TcpServer() = default;
