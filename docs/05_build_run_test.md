@@ -243,6 +243,41 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
 5. 确认所有客户端都能收到 echo。
 6. Ctrl+C 断开客户端后，服务端不崩溃。
 
+### 阶段 4B-1 验证
+
+结构检查：
+
+```bash
+  rg -n "ConnectionCallback|setConnectionCallback|connectionCallback_" src/TcpServer.h src/TcpServer.cpp src/tcpepoll_02.cpp
+```
+
+运行验证：
+
+1. cd src && make
+2. 启动服务端：./epoll 127.0.0.1 8080
+3. 启动三个客户端。
+4. 确认每个客户端连接时服务端打印连接建立回调。
+5. 分别发送 40、80、120 字节字符串。
+6. 确认 echo 正常，客户端断开后服务端不崩溃。
+
+### 阶段 4B-2 验证
+
+结构检查：
+
+```bash
+  rg -n "CloseCallback|setCloseCallback|closeCallback_" src/TcpServer.h src/TcpServer.cpp src/tcpepoll_02.cpp
+```
+
+运行验证：
+
+1. cd src && make
+2. 启动服务端：./epoll 127.0.0.1 8080
+3. 启动三个客户端。
+4. 分别发送短字符串和稍长字符串。
+5. Ctrl+C 断开客户端。
+6. 确认服务端打印关闭回调。
+7. 确认服务端不崩溃，原有 echo 和连接建立回调行为不变。
+
 ## 后续压力测试
 
 可使用以下方式逐步增加压力：

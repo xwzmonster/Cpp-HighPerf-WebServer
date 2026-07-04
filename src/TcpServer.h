@@ -29,8 +29,10 @@ public:
     // Epoll* getep_();
 
     using MessageCallback = std::function<void(TcpConnection*, Buffer*)>;
-    
     void setMessageCallback(const MessageCallback& cb);
+
+    using ConnectionCallback = std::function<void(TcpConnection*)>;
+    void setConnectionCallback(const ConnectionCallback& cb);
 
     void newConnection(int clientfd, const InetAddress& clientaddr);
     ~TcpServer();
@@ -45,6 +47,7 @@ private:
     std::unique_ptr<Acceptor> acceptor_;
 
     MessageCallback messageCallback_;
+    ConnectionCallback connectionCallback_;
 
     // bool handleAccept();
     bool removeConnection(int fd);

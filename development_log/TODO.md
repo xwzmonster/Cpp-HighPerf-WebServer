@@ -25,7 +25,7 @@
      - 完成标准：`Buffer.h`、`Buffer.cpp` 已新增；`Buffer.cpp` 已加入 `Makefile`；`make` 和语法检查通过；原有多客户端 echo 行为不变。
      - 验证方法：三客户端 echo 测试通过，客户端 Ctrl+C 断开后服务端不崩溃。
 
-7. 1. 阶段 3B：用 `Buffer outputBuffer_` 替换 `TcpConnection::outbuf_`。
+7. 阶段 3B：用 `Buffer outputBuffer_` 替换 `TcpConnection::outbuf_`。
      - 完成标准：`TcpConnection` 使用 `Buffer outputBuffer_` 管理待发送数据。
      - 验证方法：三客户端 echo、稍长字符串 echo、客户端 Ctrl+C 断开均正常。
 
@@ -37,11 +37,15 @@
      - 完成标准：echo 业务移动到入口文件，`TcpConnection::handleRead()` 通过消息回调通知业务层。
      - 验证方法：短消息、连续消息、稍长字符串 echo 均正常，客户端断开后服务端不崩溃。
 
-## P1：当前必须做
-
-1. 阶段 4B-1：只增加 `ConnectionCallback`。
+10. 阶段 4B-1：只增加 `ConnectionCallback`。
      - 完成标准：连接建立时，上层业务能收到通知。
      - 验证方法：客户端连接时服务端打印连接建立回调，原有 echo 行为不变。
+
+## P1：当前必须做
+
+1. 阶段 4B-2：增加业务层 `CloseCallback`。
+     - 完成标准：连接关闭前，上层业务能收到通知。
+     - 验证方法：客户端 Ctrl+C 断开时服务端能打印关闭回调，原有 echo 行为不变，服务端不崩溃。
 
 ## P2：后续应该做
 

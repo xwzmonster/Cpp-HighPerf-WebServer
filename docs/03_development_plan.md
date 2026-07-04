@@ -262,6 +262,48 @@
 4. 客户端 Ctrl+C 断开后服务端不崩溃。
 5. echo 业务不再写死在 `TcpConnection::handleRead()` 中。
 
+当前状态：阶段 4A 已完成。`MessageCallback` 已接入，echo 业务已经从 `TcpConnection::handleRead()` 移动到 `tcpepoll_02.cpp`。下一步进入阶段 4B-1：只增加 `ConnectionCallback`。
+
+### 阶段 4B-1：只增加 ConnectionCallback
+
+目标：连接建立后，让上层业务能够收到通知。
+
+计划：
+
+1. `TcpServer` 定义并保存 `ConnectionCallback`。
+2. `TcpServer` 对外提供 `setConnectionCallback()`。
+3. `TcpServer::newConnection()` 创建 `TcpConnection` 后触发连接建立回调。
+4. `tcpepoll_02.cpp` 设置连接建立回调，先只打印日志。
+5. 保持原有 echo 行为不变。
+
+完成标准：
+
+1. `make` 能成功。
+2. 客户端连接时服务端能打印连接建立回调。
+3. 原有 `MessageCallback` echo 行为不变。
+4. 客户端断开后服务端不崩溃。
+
+当前状态：阶段 4B-1 已完成。`ConnectionCallback` 已接入，客户端连接建立时业务层可以收到通知。下一步进入阶段 4B-2：增加业务层
+  `CloseCallback`。
+
+### 阶段 4B-2：增加 CloseCallback
+
+目标：连接关闭前，让业务层能够收到通知。
+
+计划：
+
+1. `TcpServer` 定义并保存 `CloseCallback`。
+2. `TcpServer` 对外提供 `setCloseCallback()`。
+3. `TcpServer::removeConnection()` 在 erase 前触发关闭回调。
+4. `tcpepoll_02.cpp` 设置关闭回调，先只打印日志。
+5. 保持原有 echo、连接建立回调和断开行为不变。
+
+完成标准：
+
+1. `make` 能成功。
+2. 客户端 Ctrl+C 断开时服务端能打印关闭回调。
+3. 服务端不崩溃。
+
 ## 阶段 5：多线程 Reactor
 
 目标：主 Reactor 接受连接，子 Reactor 处理连接读写。

@@ -34,6 +34,10 @@ int main(int argc, char* argv[]) {
     Eventloop loop;
     TcpServer server(&loop, argv[1], static_cast<uint16_t>(port));
     
+    server.setConnectionCallback([](TcpConnection* conn) {
+        printf("connection callback: conn = %p\n new connection established\n", (void*)conn);
+    });
+
     server.setMessageCallback([](TcpConnection* conn, Buffer* buf) {
         conn->send(buf->peek(), buf->readableBytes());
         buf->retrieveAll();

@@ -2,8 +2,7 @@
 
 ## 当前架构
 
-当前项目已经完成到阶段 4A：`TcpConnection` 已同时拥有输入缓冲、输出缓冲和最小消息回调 `MessageCallback`，echo 业务已经从
-  `TcpConnection::handleRead()` 移动到入口文件。
+当前项目已经完成到阶段 4B-1：`TcpConnection` 已同时拥有输入缓冲、输出缓冲和最小消息回调 `MessageCallback`，`TcpServer` 已支持连接建立回调 `ConnectionCallback`。echo 业务已经从 `TcpConnection::handleRead()` 移动到入口文件。
 
 ```text
   main
@@ -88,7 +87,7 @@ main
 
 ## 下一阶段目标：ConnectionCallback
 
-下一阶段只增加连接建立回调，让业务层能感知新连接建立。暂时不做关闭回调，不进入多线程 Reactor。
+下一阶段只增加业务层关闭回调，让业务层能在连接销毁前收到通知。暂时不进入多线程 Reactor。
 
 ## muduo 风格目标架构
 
