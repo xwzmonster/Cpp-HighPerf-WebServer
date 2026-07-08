@@ -122,6 +122,10 @@ bool TcpServer::removeConnection(int fd) {
     if(it == this->conns_.end()) {
         return false;
     }
+    TcpConnection* conn = it->second.get();
+    if(this->closeCallback_) {
+        closeCallback_(conn);
+    }
     this->conns_.erase(it);
     return true;
 }
@@ -132,6 +136,10 @@ void TcpServer::setMessageCallback(const MessageCallback& cb) {
 
 void TcpServer::setConnectionCallback(const ConnectionCallback& cb) {
     this->connectionCallback_ = cb;
+}
+
+void TcpServer::setCloseCallback(const CloseCallback& cb) {
+    this->closeCallback_ = cb;
 }
 
 void TcpServer::newConnection(int clientfd, const InetAddress& clientaddr) {

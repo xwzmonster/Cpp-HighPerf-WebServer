@@ -34,6 +34,9 @@ public:
     using ConnectionCallback = std::function<void(TcpConnection*)>;
     void setConnectionCallback(const ConnectionCallback& cb);
 
+    using CloseCallback = std::function<void(TcpConnection*)>;
+    void setCloseCallback(const CloseCallback& cb);
+
     void newConnection(int clientfd, const InetAddress& clientaddr);
     ~TcpServer();
 
@@ -48,6 +51,7 @@ private:
 
     MessageCallback messageCallback_;
     ConnectionCallback connectionCallback_;
+    CloseCallback closeCallback_;
 
     // bool handleAccept();
     bool removeConnection(int fd);

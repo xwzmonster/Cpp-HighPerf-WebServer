@@ -38,6 +38,10 @@ int main(int argc, char* argv[]) {
         printf("connection callback: conn = %p\n new connection established\n", (void*)conn);
     });
 
+    server.setCloseCallback([](TcpConnection* conn){
+        printf("close callback: conn = %p\n connection closed\n", (void*)conn);
+    });
+
     server.setMessageCallback([](TcpConnection* conn, Buffer* buf) {
         conn->send(buf->peek(), buf->readableBytes());
         buf->retrieveAll();

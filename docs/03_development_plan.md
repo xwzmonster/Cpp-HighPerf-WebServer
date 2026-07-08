@@ -304,6 +304,8 @@
 2. 客户端 Ctrl+C 断开时服务端能打印关闭回调。
 3. 服务端不崩溃。
 
+当前状态：阶段 4B-2 已完成。`TcpServer` 已支持业务层 `CloseCallback`，并且在 `TcpServer::removeConnection()` 中于 `conns_.erase()` 前触发关闭回调。三客户端 echo、连接建立回调、关闭回调和客户端断开测试通过。
+
 ## 阶段 5：多线程 Reactor
 
 目标：主 Reactor 接受连接，子 Reactor 处理连接读写。

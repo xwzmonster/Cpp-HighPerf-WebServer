@@ -2,7 +2,7 @@
 
 ## 当前架构
 
-当前项目已经完成到阶段 4B-1：`TcpConnection` 已同时拥有输入缓冲、输出缓冲和最小消息回调 `MessageCallback`，`TcpServer` 已支持连接建立回调 `ConnectionCallback`。echo 业务已经从 `TcpConnection::handleRead()` 移动到入口文件。
+当前项目已经完成到阶段 4B-2：`TcpConnection` 已同时拥有输入缓冲、输出缓冲和最小消息回调 `MessageCallback`，`TcpServer` 已支持连接建立回调 `ConnectionCallback` 和连接关闭回调 `CloseCallback`。echo 业务已经从 `TcpConnection::handleRead()` 移动到入口文件。
 
 ```text
   main
@@ -85,7 +85,7 @@ main
   6. TcpConnection 负责单个客户端连接的读写和关闭状态。
   7. 单线程阶段不加锁, 多线程阶段再引入线程归属和跨线程任务队列。
 
-## 下一阶段目标：ConnectionCallback
+## 下一阶段目标：清理职责边界并准备多线程 Reactor 设计
 
 下一阶段只增加业务层关闭回调，让业务层能在连接销毁前收到通知。暂时不进入多线程 Reactor。
 
