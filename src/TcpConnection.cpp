@@ -20,9 +20,9 @@ bool TcpConnection::tryWrite() {
     // std::string& out = this->outputBuffer_;
 
     /*
-        把用户态outbuf里的数据, 尽可能写入 fd 对应 socket 的内核发送缓冲区
+        把用户态outputBuffer_里的数据, 尽可能写入 fd 对应 socket 的内核发送缓冲区
         数据流
-                服务器用户态 outbuf
+                服务器用户态 outputBuffer_
                         |
                         | send()
                         v
