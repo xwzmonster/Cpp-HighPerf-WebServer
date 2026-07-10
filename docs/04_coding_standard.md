@@ -12,8 +12,10 @@
 
 1. `Channel` 只保存事件回调，不写业务逻辑。
 2. 读、写、关闭、错误分别使用独立回调。
-3. 回调返回 `false` 表示连接需要关闭。
-4. lambda 捕获 `this` 时，必须保证 `Channel` 生命周期短于所属对象，或者在析构前从 epoll 删除。
+3. `Channel::EventCallback` 返回 `false` 表示当前 fd 对应对象不应继续处理；`ConnectionCallback`、`MessageCallback`、业务 `CloseCallback` 等
+  业务回调返回 `void`，只负责业务通知。
+4. lambda 捕获 `this` 时，必须保证保存 lambda 的对象不会在 `this` 销毁后继续调用它。
+5. 业务回调收到的 `TcpConnection*` 和 `Buffer*` 是借用指针，不得长期保存或跨线程使用。
 
 ## 命名建议
 

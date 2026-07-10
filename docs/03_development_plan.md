@@ -212,7 +212,7 @@
 1. TcpConnection.h 中存在 Buffer inputBuffer_。
 2. TcpConnection.h 中存在 Buffer outputBuffer_。
 3. handleRead() 先追加数据到 inputBuffer_。
-4. 当前 echo 逻辑中，inputBuffer_ 的可读数据会追加到 outputBuffer_。
+4. 当前 echo 逻辑中，inputBuffer_的可读数据会追加到 outputBuffer_。
 5. 处理完成后会消费或清空 inputBuffer_。
 
 运行验证：
@@ -305,6 +305,25 @@
 3. 服务端不崩溃。
 
 当前状态：阶段 4B-2 已完成。`TcpServer` 已支持业务层 `CloseCallback`，并且在 `TcpServer::removeConnection()` 中于 `conns_.erase()` 前触发关闭回调。三客户端 echo、连接建立回调、关闭回调和客户端断开测试通过。
+
+### 阶段 4C：回调机制复盘和文档补齐
+
+目标：不增加新功能，理解当前项目中的底层事件回调、框架内部回调和业务回调。
+
+当前状态：进行中。
+
+完成标准：
+
+1. 能说明 `setXXXCallback()` 只负责保存函数，不会立即执行。
+2. 能说明 `ConnectionCallback` 在哪里设置、保存和调用。
+3. 能说明 `MessageCallback` 在哪里设置、下发、保存和调用。
+4. 能说明业务 `CloseCallback` 在哪里设置、保存和调用。
+5. 能区分 `Channel::setCloseCallback()` 和 `TcpServer::setCloseCallback()`。
+6. 能说明关闭回调为什么必须在 `conns_.erase()` 前执行。
+7. 能说明业务回调收到的裸指针不能被长期保存。
+8. 已更新架构文档、测试文档和开发日志。
+
+下一阶段：阶段 4C 完成后，进入阶段 4D，逐步收口回调职责和生命周期边界。暂不进入多线程 Reactor。
 
 ## 阶段 5：多线程 Reactor
 
