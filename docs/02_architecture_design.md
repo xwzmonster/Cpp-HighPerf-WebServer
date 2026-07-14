@@ -75,6 +75,38 @@ main
     -> Socket 析构时关闭 fd
 ```
 
+业务 CloseCallback 必须在 conns_.erase() 前执行。执行 erase() 后，`unique_ptr<TcpConnection>` 管理的连接对象会被销毁，之前取得的TcpConnection* 随即失效，业务层不能继续访问或长期保存该指针。
+
+## 当前回调分类
+
+### 底层事件回调
+
+由 `Channel` 保存和触发，包括读、写、关闭和错误事件回调。
+
+```text
+  epoll_wait
+    -> Channel::handleEvent()
+    -> readCallback_ / writeCallback_ / closeCallback_ / errorCallback_
+```
+
+### 框架内部通知回调
+
+用于不同框架对象之间传递事件：
+
+1. Acceptor::NewConnectionCallback：把新客户端 fd 通知给 TcpServer。
+2. Eventloop::RemoveConnectionCallback：把需要移除的 fd 通知给 TcpServer。
+
+### 上层业务回调
+
+由入口文件设置，由 TcpServer 保存：
+
+1. ConnectionCallback：连接建立后执行。
+2. MessageCallback：收到数据后执行。
+3. CloseCallback：连接销毁前执行。
+
+setXXXCallback() 只负责保存可调用对象，不会立即执行。真正执行回调的位置分别位于连接建立、收到消息和连接关闭的事件处理路径中。
+业务回调收到的 `TcpConnection*` 和 `Buffer*` 都是借用指针。业务层不能删除这些对象，也不能把这些指针长期保存到异步任务或成员变量中。
+
 ## 关键设计原则
 
   1. Socket 拥有 fd, 析构时关闭 fd。

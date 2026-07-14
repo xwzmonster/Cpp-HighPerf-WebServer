@@ -208,7 +208,7 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
 1. TcpConnection.h 中存在 Buffer inputBuffer_。
 2. TcpConnection.h 中存在 Buffer outputBuffer_。
 3. handleRead() 先追加数据到 inputBuffer_。
-4. inputBuffer_ 的可读数据会追加到 outputBuffer_。
+4. inputBuffer_的可读数据会追加到 outputBuffer_。
 5. 处理完成后会清空或消费 inputBuffer_。
 
 运行验证：
@@ -277,6 +277,41 @@ g++ -std=c++17 -Wall -Wextra -fsyntax-only tcpepoll_02.cpp InetAddress.cpp Socke
 5. Ctrl+C 断开客户端。
 6. 确认服务端打印关闭回调。
 7. 确认服务端不崩溃，原有 echo 和连接建立回调行为不变。
+
+### 阶段 4C 验证
+
+阶段 4C 不增加功能，主要验证回调调用链、职责边界和生命周期。
+
+结构检查：
+
+```bash
+  rg -n "ConnectionCallback|MessageCallback|CloseCallback|set.*Callback|removeConnection|messageCallback_" \
+    src/TcpServer.h src/TcpServer.cpp \
+    src/TcpConnection.h src/TcpConnection.cpp \
+    src/Eventloop.h src/Eventloop.cpp \
+    src/Channel.h src/Channel.cpp \
+    src/tcpepoll_02.cpp
+```
+
+检查标准：
+
+1. setXXXCallback() 只保存回调，不立即调用。
+2. ConnectionCallback 在 TcpServer::newConnection() 中调用。
+3. MessageCallback 从 TcpServer 下发给 TcpConnection。
+4. MessageCallback 在 TcpConnection::handleRead() 中调用。
+5. 业务 CloseCallback 在 TcpServer::removeConnection() 中调用。
+6. 业务 CloseCallback 必须在 conns_.erase() 前调用。
+7. 能区分 Channel::setCloseCallback() 和 TcpServer::setCloseCallback()。
+8. 回调收到的 TcpConnection*、Buffer* 不能被长期保存。
+
+运行验证：
+
+1. 使用 -Wall -Wextra -Wpedantic 完成语法检查。
+2. 启动三个客户端并分别发送不同长度的消息。
+3. 验证连接建立回调、消息回调和 echo。
+4. 逐个断开客户端，确认关闭回调在每个连接上执行一次。
+5. 全部客户端断开后重新连接，确认服务端仍能 accept 和 echo。
+6. 服务端运行过程中不得出现崩溃、死循环或 sanitizer 报错。
 
 ## 后续压力测试
 
